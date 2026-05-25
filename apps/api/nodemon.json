@@ -1,0 +1,7 @@
+{
+  "watch": ["src", "../../packages/schemas/dist"],
+  "ext": "ts,js,json,d.ts",
+  "ignore": ["**/*.spec.ts", "dist"],
+  "delay": "200",
+  "exec": "nest start"
+}
