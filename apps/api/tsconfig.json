@@ -13,7 +13,7 @@
     "target": "ES2023",
     "sourceMap": true,
     "outDir": "./dist",
-    "rootDir": "./src",
+    "noEmit": true,
     "types": ["node", "jest"],
     "incremental": true,
     "tsBuildInfoFile": "./dist/.tsbuildinfo",
@@ -24,6 +24,6 @@
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false
   },
-  "include": ["src"],
+  "include": ["src", "prisma.config.ts"],
   "exclude": ["dist", "node_modules", "test"]
 }

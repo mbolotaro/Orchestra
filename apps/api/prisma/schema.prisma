@@ -1,0 +1,88 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+  moduleFormat = "cjs"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id String @id @default(uuid(7)) @db.Uuid
+  firstName String @db.VarChar(100) @map("first_name")
+  lastName String @db.VarChar(100) @map("last_name")
+  email String @db.VarChar(254)
+  isEmailVerified Boolean @map("is_email_verified") @default(false)
+  passwordHash String? @db.VarChar(255) @map("password_hash")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime? @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  oAuthAccounts OAuthAccount[]
+
+  @@unique([email], where: { deletedAt: null })
+  @@map("users")
+}
+
+enum OAuthAccountType {
+  Google @map("google")
+  GitHub @map("github")
+
+  @@map("oauth_account_type")
+}
+
+model OAuthAccount {
+  id String @id @default(uuid(7)) @db.Uuid
+  provider OAuthAccountType
+  providerId String @db.VarChar(255) @map("provider_id")
+  userId String @db.Uuid @map("user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime? @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([provider, providerId])
+  @@unique([userId, provider])
+  @@map("oauth_accounts")
+}
+
+enum AuthAction {
+  SignUp @map("sign_up")
+  Login @map("login")
+  Logout @map("logout")
+
+  @@map("auth_action")
+}
+
+enum AuthStatus {
+  Success @map("success")
+  Failed @map("failed")
+
+  @@map("auth_status")
+}
+
+model AuthLog {
+  id String @id @default(uuid(7)) @db.Uuid
+  userId String? @db.Uuid @map("user_id")
+  email String @db.VarChar(254)
+  action AuthAction
+  provider OAuthAccountType?
+  status AuthStatus
+  userAgent String? @db.VarChar(512) @map("user_agent")
+  ipAddress String? @db.VarChar(45) @map("ip_address")
+  occurredAt DateTime @default(now()) @map("occurred_at")
+
+  @@index([email, occurredAt])
+  @@index([userId, occurredAt])
+
+  @@map("auth_logs")
+}
