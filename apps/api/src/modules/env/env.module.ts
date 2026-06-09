@@ -20,7 +20,10 @@ function validate(raw: Record<string, unknown>): AppEnv {
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: path.resolve(__dirname, '../../../../../.env'),
+      envFilePath: [
+        path.resolve(__dirname, '../../../../../.env'),
+        path.resolve(__dirname, '../../../.env'),
+      ],
       validate,
     }),
   ],

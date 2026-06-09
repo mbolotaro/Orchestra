@@ -27,6 +27,7 @@ model User {
   deletedAt DateTime? @map("deleted_at")
 
   oAuthAccounts OAuthAccount[]
+  refreshTokens RefreshToken[]
 
   @@unique([email], where: { deletedAt: null })
   @@map("users")
@@ -57,8 +58,8 @@ model OAuthAccount {
 
 enum AuthAction {
   SignUp @map("sign_up")
-  Login @map("login")
-  Logout @map("logout")
+  SignIn @map("sign_in")
+  SignOut @map("sign_out")
 
   @@map("auth_action")
 }
@@ -85,4 +86,24 @@ model AuthLog {
   @@index([userId, occurredAt])
 
   @@map("auth_logs")
+}
+
+model RefreshToken {
+  id String @id @default(uuid(7)) @db.Uuid
+  userId String @db.Uuid
+  jti String @unique @db.VarChar(36)
+  tokenHash String @db.VarChar(255)
+  expiresAt DateTime
+  revokedAt DateTime?
+  replacedBy String? @db.VarChar(36)
+  createdAt DateTime @default(now())
+  userAgent String? @db.VarChar(512)
+  ipAddress String? @db.VarChar(45)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, revokedAt])
+  @@index([jti])
+
+  @@map("refresh_tokens")
 }
