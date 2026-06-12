@@ -7,6 +7,7 @@ import { type Response } from 'express';
 import { AuthCookieService } from './auth-cookie.service';
 import { ZodSerializerDto } from 'nestjs-zod';
 import { PublicAuthDto } from './dto/public-auth.dto';
+import { SignInDto } from './dto/signin.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -33,5 +34,19 @@ export class AuthController {
   }
 
   @Post('sign-in')
-  async signIn() {}
+  @ZodSerializerDto(PublicAuthDto)
+  async signIn(
+    @SessionInfo() session: SessionInfoPayload,
+    @Body() signInDto: SignInDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { user, accessToken, refreshToken } = await this.authService.signIn(
+      signInDto,
+      session,
+    );
+
+    this.authCookieService.set(res, { accessToken, refreshToken });
+
+    return { user };
+  }
 }

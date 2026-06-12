@@ -42,4 +42,30 @@ export class AuthLogsService {
       );
     }
   }
+
+  async recordSignInLog(recordAuthLog: RecordAuthLog, tx?: TransactionClient) {
+    try {
+      const client = tx ?? this.prismaService;
+
+      const log = await client.authLog.create({
+        data: {
+          action: AuthAction.SignIn,
+          status: recordAuthLog.status,
+          email: recordAuthLog.email,
+          userId: recordAuthLog.userId,
+          occurredAt: recordAuthLog.occurredAt,
+          ipAddress: recordAuthLog.ipAddress,
+          userAgent: recordAuthLog.userAgent,
+        },
+      });
+
+      return log;
+    } catch (error) {
+      this.logger.error({ error }, 'recordSignInLog');
+
+      throw new InternalServerErrorException(
+        'Não foi possível registrar autenticação.',
+      );
+    }
+  }
 }

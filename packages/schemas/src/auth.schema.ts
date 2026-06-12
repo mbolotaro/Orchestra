@@ -22,3 +22,8 @@ export const PublicAuthSchema = z.object({
 })
 
 export type PublicAuth = z.infer<typeof PublicAuthSchema>;
+
+export const SignInSchema = z.object({
+    email: z.string().min(1).max(MAX_USER_EMAIL),
+    password: z.string().min(1).max(MAX_USER_PASSWORD)
+})

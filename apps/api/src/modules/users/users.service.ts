@@ -11,6 +11,7 @@ import { CreateUserInput } from './types/create-user.type';
 import { PublicUser, PublicUserSchema } from '@orchestra/schemas';
 import { getPrismaError } from '../prisma/helpers/get-prisma-error.helper';
 import { TransactionClient } from '../../generated/prisma/internal/prismaNamespace';
+import { User } from '../../generated/prisma/client';
 
 @Injectable()
 export class UsersService {
@@ -57,6 +58,25 @@ export class UsersService {
 
       throw new InternalServerErrorException(
         'Não foi possível cadastrar usuário.',
+      );
+    }
+  }
+
+  async findRawByEmail(
+    email: string,
+    tx?: TransactionClient,
+  ): Promise<User | null> {
+    const client = tx ?? this.prismaService;
+
+    try {
+      const user = await client.user.findFirst({ where: { email } });
+
+      return user;
+    } catch (error) {
+      this.logger.error({ error, email }, 'findRawByEmail');
+
+      throw new InternalServerErrorException(
+        'Não foi possível buscar usuário pelo e-mail!',
       );
     }
   }

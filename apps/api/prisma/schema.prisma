@@ -67,7 +67,9 @@ enum AuthAction {
 enum AuthStatus {
   Success @map("success")
   Failed @map("failed")
-
+  UserNotFound @map("user_not_found")
+  WrongPassword @map("wrong_password")
+  NoPasswordHash @map("no_password_hash")
   @@map("auth_status")
 }
 
