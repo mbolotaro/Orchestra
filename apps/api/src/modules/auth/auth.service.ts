@@ -17,7 +17,7 @@ import { TokenService } from './token.service';
 import { Response } from 'express';
 import { AuthSession } from './types/auth-session.type';
 import { SignInDto } from './dto/signin.dto';
-import { PublicUserSchema } from '@orchestra/schemas';
+import { PublicAuth, PublicUserSchema } from '@orchestra/schemas';
 
 @Injectable()
 export class AuthService {
@@ -191,5 +191,13 @@ export class AuthService {
 
       throw new InternalServerErrorException('Não foi possível autenticar.');
     }
+  }
+
+  async me(userId: string): Promise<PublicAuth> {
+    const user = await this.usersService.getById(userId);
+
+    return {
+      user,
+    };
   }
 }

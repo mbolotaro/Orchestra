@@ -4,6 +4,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
   NotImplementedException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -59,6 +60,28 @@ export class UsersService {
       throw new InternalServerErrorException(
         'Não foi possível cadastrar usuário.',
       );
+    }
+  }
+
+  async getById(userId: string, tx?: TransactionClient): Promise<PublicUser> {
+    try {
+      const client = tx ?? this.prismaService;
+      const user = await client.user.findUnique({
+        where: { id: userId },
+        omit: { passwordHash: true },
+      });
+
+      if (!user) {
+        throw new NotFoundException('Usuário não encontrado!');
+      }
+
+      return PublicUserSchema.parse(user);
+    } catch (error) {
+      this.logger.error({ error, userId }, 'getById');
+
+      if (error instanceof HttpException) throw error;
+
+      throw new InternalServerErrorException('Não foi possível obter');
     }
   }
 

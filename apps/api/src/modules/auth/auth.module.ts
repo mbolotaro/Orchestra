@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
@@ -9,6 +10,7 @@ import { EnvModule } from '../env/env.module';
 import { EnvService } from '../env/env.service';
 import { RefreshTokenService } from './refresh-token.service';
 import { AuthCookieService } from './auth-cookie.service';
+import { AuthGuard } from './guards/auth.guard';
 
 @Module({
   imports: [
@@ -29,6 +31,10 @@ import { AuthCookieService } from './auth-cookie.service';
     TokenService,
     RefreshTokenService,
     AuthCookieService,
+    {
+      provide: APP_GUARD,
+      useClass: AuthGuard,
+    },
   ],
 })
 export class AuthModule {}
