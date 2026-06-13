@@ -28,7 +28,21 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-floating-promises': 'warn',
-      '@typescript-eslint/no-unsafe-argument': 'warn'
+      '@typescript-eslint/no-unsafe-argument': 'warn',
+    },
+  },
+  {
+    files: ['**/*.spec.ts'],
+    rules: {
+      // Jest assertions (expect(mock).toHaveBeenCalled etc.) só leem mock.calls,
+      // não invocam o método — `this` não entra em jogo. False positive.
+      '@typescript-eslint/unbound-method': 'off',
+      // Matchers do Jest (expect.objectContaining, expect.any, etc.) retornam `any`
+      // por design. Família no-unsafe-* dispara em massa em testes — false positives.
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
     },
   },
 );
