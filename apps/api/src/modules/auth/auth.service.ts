@@ -14,10 +14,10 @@ import { AuthLogsService } from './auth-logs.service';
 import { AuthStatus } from '../../generated/prisma/enums';
 import { RefreshTokenService } from './refresh-token.service';
 import { TokenService } from './token.service';
-import { Response } from 'express';
 import { AuthSession } from './types/auth-session.type';
 import { SignInDto } from './dto/signin.dto';
 import { PublicAuth, PublicUserSchema } from '@orchestra/schemas';
+import { RefreshTokenReuseException } from './exceptions/refresh-token-reuse.exception';
 
 @Injectable()
 export class AuthService {
@@ -143,29 +143,25 @@ export class AuthService {
     }
 
     try {
-      const { refreshToken } = await this.prismaService.$transaction(
-        async (tx) => {
-          const { token: refreshToken } = await this.refreshTokenService.issue(
-            user.id,
-            session,
-            tx,
-          );
-          await this.authLogService.recordSignInLog(
-            {
-              email: user.email,
-              userId: user.id,
-              status: AuthStatus.Success,
-              ipAddress: session.ip,
-              userAgent: session.userAgent,
-              occurredAt: now,
-            },
-            tx,
-          );
-          return { refreshToken };
-        },
+      const { token: refreshToken } = await this.refreshTokenService.issue(
+        user.id,
+        session,
       );
 
       const accessToken = await this.tokenService.signAccess(user.id);
+
+      await this.authLogService
+        .recordSignInLog({
+          email: user.email,
+          userId: user.id,
+          status: AuthStatus.Success,
+          ipAddress: session.ip,
+          userAgent: session.userAgent,
+          occurredAt: now,
+        })
+        .catch((logError: unknown) =>
+          this.logger.error({ error: logError }, 'signIn'),
+        );
 
       return {
         refreshToken,
@@ -199,5 +195,64 @@ export class AuthService {
     return {
       user,
     };
+  }
+
+  async refresh(
+    token: string,
+    session: SessionInfoPayload,
+  ): Promise<AuthSession> {
+    const now = new Date();
+
+    try {
+      const { userId, token: refreshToken } =
+        await this.refreshTokenService.rotate(token, session);
+
+      const [user, accessToken] = await Promise.all([
+        this.usersService.getById(userId),
+        this.tokenService.signAccess(userId),
+      ]);
+
+      await this.authLogService
+        .recordRefreshLog({
+          email: user.email,
+          userId,
+          status: AuthStatus.Success,
+          ipAddress: session.ip,
+          userAgent: session.userAgent,
+          occurredAt: now,
+        })
+        .catch((logError: unknown) =>
+          this.logger.error({ error: logError }, 'refresh'),
+        );
+
+      return {
+        user,
+        accessToken,
+        refreshToken,
+      };
+    } catch (error) {
+      this.logger.error({ error }, 'refresh');
+
+      const status =
+        error instanceof RefreshTokenReuseException
+          ? AuthStatus.Reuse
+          : AuthStatus.Failed;
+
+      const userId = this.tokenService.decodeUnsafe(token)?.sub;
+
+      await this.authLogService
+        .recordRefreshLog({
+          userId,
+          status,
+          ipAddress: session.ip,
+          userAgent: session.userAgent,
+          occurredAt: now,
+        })
+        .catch((logError: unknown) =>
+          this.logger.error({ error: logError }, 'refresh'),
+        );
+
+      throw error;
+    }
   }
 }

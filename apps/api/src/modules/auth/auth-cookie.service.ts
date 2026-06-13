@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { EnvService } from '../env/env.service';
-import { CookieOptions, Response } from 'express';
+import { CookieOptions, Request, Response } from 'express';
 import { durationToMs } from '../../common/helpers/parse-duration.helper';
 
 @Injectable()
@@ -9,6 +9,17 @@ export class AuthCookieService {
   static readonly REFRESH_TOKEN = 'refresh_token';
 
   constructor(private readonly env: EnvService) {}
+
+  get(req: Request): { accessToken?: string; refreshToken?: string } {
+    return {
+      accessToken: req.cookies?.[AuthCookieService.ACCESS_TOKEN] as
+        | string
+        | undefined,
+      refreshToken: req.cookies?.[AuthCookieService.REFRESH_TOKEN] as
+        | string
+        | undefined,
+    };
+  }
 
   set(
     res: Response,

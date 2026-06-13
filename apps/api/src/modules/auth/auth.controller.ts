@@ -1,9 +1,17 @@
-import { Body, Controller, Get, Post, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Req,
+  Res,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignUpDto } from './dto/signup.dto';
 import { SessionInfo } from './decorators/session-info.decorator';
 import { type SessionInfoPayload } from './types/session-info.type';
-import { type Response } from 'express';
+import { type Request, type Response } from 'express';
 import { AuthCookieService } from './auth-cookie.service';
 import { ZodSerializerDto } from 'nestjs-zod';
 import { PublicAuthDto } from './dto/public-auth.dto';
@@ -60,5 +68,26 @@ export class AuthController {
   @ZodSerializerDto(PublicAuthDto)
   async me(@CurrentUser() { sub }: RequestUser): Promise<PublicAuth> {
     return await this.authService.me(sub);
+  }
+
+  @Public()
+  @Post('refresh')
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @SessionInfo() session: SessionInfoPayload,
+  ) {
+    const { refreshToken: oldRefreshToken } = this.authCookieService.get(req);
+
+    if (!oldRefreshToken) throw new UnauthorizedException('Não autenticado.');
+
+    const { accessToken, refreshToken, user } = await this.authService.refresh(
+      oldRefreshToken,
+      session,
+    );
+
+    this.authCookieService.set(res, { accessToken, refreshToken });
+
+    return { user };
   }
 }

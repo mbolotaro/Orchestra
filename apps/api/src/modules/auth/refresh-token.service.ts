@@ -14,6 +14,8 @@ import { randomUUID } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { Prisma } from '../../generated/prisma/client';
 import { durationToMs } from '../../common/helpers/parse-duration.helper';
+import { RefreshTokenReuseException } from './exceptions/refresh-token-reuse.exception';
+import { TransactionClient } from '../../generated/prisma/internal/prismaNamespace';
 
 @Injectable()
 export class RefreshTokenService {
@@ -64,11 +66,13 @@ export class RefreshTokenService {
   async rotate(
     rawToken: string,
     session: SessionInfoPayload,
+    tx?: TransactionClient,
   ): Promise<IssuedRefresh & { userId: string }> {
     try {
+      const client = tx ?? this.prismaService;
       const payload = await this.tokenService.verifyRefresh(rawToken);
 
-      const record = await this.prismaService.refreshToken.findUnique({
+      const record = await client.refreshToken.findUnique({
         where: { jti: payload.jti },
       });
 
@@ -84,7 +88,7 @@ export class RefreshTokenService {
 
         await this.revokeAllForUser(record.userId);
 
-        throw new UnauthorizedException('Refresh token comprometido.');
+        throw new RefreshTokenReuseException();
       }
 
       if (record.expiresAt < new Date()) {
@@ -96,7 +100,7 @@ export class RefreshTokenService {
       if (!hashMatches)
         throw new UnauthorizedException('Refresh token inválido.');
 
-      return await this.prismaService.$transaction(async (tx) => {
+      return await client.$transaction(async (tx) => {
         const issued = await this.issue(record.userId, session, tx);
 
         await tx.refreshToken.update({

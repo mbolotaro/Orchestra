@@ -60,6 +60,7 @@ enum AuthAction {
   SignUp @map("sign_up")
   SignIn @map("sign_in")
   SignOut @map("sign_out")
+  Refresh @map("refresh")
 
   @@map("auth_action")
 }
@@ -70,13 +71,14 @@ enum AuthStatus {
   UserNotFound @map("user_not_found")
   WrongPassword @map("wrong_password")
   NoPasswordHash @map("no_password_hash")
+  Reuse @map("reuse")
   @@map("auth_status")
 }
 
 model AuthLog {
   id String @id @default(uuid(7)) @db.Uuid
   userId String? @db.Uuid @map("user_id")
-  email String @db.VarChar(254)
+  email String? @db.VarChar(254)
   action AuthAction
   provider OAuthAccountType?
   status AuthStatus
