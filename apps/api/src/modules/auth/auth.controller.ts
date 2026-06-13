@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Post,
   Req,
   Res,
@@ -64,19 +66,14 @@ export class AuthController {
     return { user };
   }
 
-  @Get('me')
-  @ZodSerializerDto(PublicAuthDto)
-  async me(@CurrentUser() { sub }: RequestUser): Promise<PublicAuth> {
-    return await this.authService.me(sub);
-  }
-
   @Public()
   @Post('refresh')
+  @ZodSerializerDto(PublicAuthDto)
   async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
     @SessionInfo() session: SessionInfoPayload,
-  ) {
+  ): Promise<PublicAuth> {
     const { refreshToken: oldRefreshToken } = this.authCookieService.get(req);
 
     if (!oldRefreshToken) throw new UnauthorizedException('Não autenticado.');
@@ -89,5 +86,24 @@ export class AuthController {
     this.authCookieService.set(res, { accessToken, refreshToken });
 
     return { user };
+  }
+
+  @Public()
+  @Post('sign-out')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async signOut(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @SessionInfo() session: SessionInfoPayload,
+  ): Promise<void> {
+    const { refreshToken } = this.authCookieService.get(req);
+    await this.authService.signOut(refreshToken!, session);
+    this.authCookieService.clear(res);
+  }
+
+  @Get('me')
+  @ZodSerializerDto(PublicAuthDto)
+  async me(@CurrentUser() { sub }: RequestUser): Promise<PublicAuth> {
+    return await this.authService.me(sub);
   }
 }

@@ -189,6 +189,34 @@ export class AuthService {
     }
   }
 
+  async signOut(refreshToken: string, session: SessionInfoPayload) {
+    const now = new Date();
+
+    const decoded = refreshToken
+      ? this.tokenService.decodeUnsafe(refreshToken)
+      : null;
+
+    if (decoded?.jti) {
+      await this.refreshTokenService
+        .revoke(decoded.jti)
+        .catch((error: unknown) => {
+          this.logger.error({ error, userId: decoded.sub }, 'signOut');
+        });
+    }
+
+    await this.authLogService
+      .recordSignOutLog({
+        userId: decoded?.sub,
+        ipAddress: session.ip,
+        userAgent: session.userAgent,
+        occurredAt: now,
+        status: AuthStatus.Success,
+      })
+      .catch((logError: unknown) =>
+        this.logger.error({ error: logError }, 'signOut'),
+      );
+  }
+
   async me(userId: string): Promise<PublicAuth> {
     const user = await this.usersService.getById(userId);
 

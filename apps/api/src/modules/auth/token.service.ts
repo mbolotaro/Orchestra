@@ -49,7 +49,7 @@ export class TokenService {
     return payload;
   }
 
-  decodeUnsafe(token: string): { sub?: string } | null {
+  decodeUnsafe(token: string): Partial<RefreshTokenPayload> | null {
     try {
       const decoded: unknown = this.jwt.decode(token);
       return decoded && typeof decoded === 'object' ? decoded : null;
