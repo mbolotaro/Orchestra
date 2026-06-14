@@ -1,0 +1,38 @@
+{
+  "name": "@orchestra/emails",
+  "version": "0.0.1",
+  "private": true,
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "email dev --dir src/templates --port 3030",
+    "preview": "email dev --dir src/templates --port 3030",
+    "clean": "rimraf dist .react-email"
+  },
+  "dependencies": {
+    "@orchestra/theme": "workspace:^",
+    "@react-email/components": "^1.0.12",
+    "@react-email/render": "^2.0.8",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@react-email/ui": "6.6.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "react-email": "^6.6.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^6.0.3"
+  }
+}
