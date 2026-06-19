@@ -1,8 +1,9 @@
 import {
-  ConflictException,
   InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { EmailAlreadyExistsException } from '../../../common/exceptions/email-already-exists.exception';
+import { InvalidCredentialsException } from '../../../common/exceptions/invalid-credentials.exception';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
 import { mockDeep, type DeepMockProxy } from 'jest-mock-extended';
@@ -126,15 +127,13 @@ describe('AuthService', () => {
       expect(tokens.signAccess).toHaveBeenCalledWith(publicUser.id);
     });
 
-    it('error: rethrows ConflictException from usersService.create', async () => {
+    it('error: rethrows EmailAlreadyExistsException from usersService.create', async () => {
       bcryptMock.hash.mockResolvedValue('hashed-password' as never);
-      users.create.mockRejectedValue(
-        new ConflictException('Já existe um usuário'),
-      );
+      users.create.mockRejectedValue(new EmailAlreadyExistsException());
       authLogs.recordSignUpLog.mockResolvedValue({} as never);
 
       await expect(service.signUp(signUpDto, session)).rejects.toThrow(
-        ConflictException,
+        EmailAlreadyExistsException,
       );
     });
 
@@ -203,13 +202,13 @@ describe('AuthService', () => {
       );
     });
 
-    it('error: throws UnauthorizedException and logs UserNotFound when email does not exist', async () => {
+    it('error: throws InvalidCredentialsException and logs UserNotFound when email does not exist', async () => {
       users.findRawByEmail.mockResolvedValue(null);
       bcryptMock.compare.mockResolvedValue(false as never);
       authLogs.recordSignInLog.mockResolvedValue({} as never);
 
       await expect(service.signIn(signInDto, session)).rejects.toThrow(
-        UnauthorizedException,
+        InvalidCredentialsException,
       );
       expect(authLogs.recordSignInLog).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -219,7 +218,7 @@ describe('AuthService', () => {
       );
     });
 
-    it('error: throws UnauthorizedException and logs NoPasswordHash for oauth-only user', async () => {
+    it('error: throws InvalidCredentialsException and logs NoPasswordHash for oauth-only user', async () => {
       users.findRawByEmail.mockResolvedValue({
         ...rawUser,
         passwordHash: null,
@@ -228,20 +227,20 @@ describe('AuthService', () => {
       authLogs.recordSignInLog.mockResolvedValue({} as never);
 
       await expect(service.signIn(signInDto, session)).rejects.toThrow(
-        UnauthorizedException,
+        InvalidCredentialsException,
       );
       expect(authLogs.recordSignInLog).toHaveBeenCalledWith(
         expect.objectContaining({ status: AuthStatus.NoPasswordHash }),
       );
     });
 
-    it('error: throws UnauthorizedException and logs WrongPassword when password does not match', async () => {
+    it('error: throws InvalidCredentialsException and logs WrongPassword when password does not match', async () => {
       users.findRawByEmail.mockResolvedValue(rawUser as never);
       bcryptMock.compare.mockResolvedValue(false as never);
       authLogs.recordSignInLog.mockResolvedValue({} as never);
 
       await expect(service.signIn(signInDto, session)).rejects.toThrow(
-        UnauthorizedException,
+        InvalidCredentialsException,
       );
       expect(authLogs.recordSignInLog).toHaveBeenCalledWith(
         expect.objectContaining({ status: AuthStatus.WrongPassword }),
@@ -254,7 +253,7 @@ describe('AuthService', () => {
       authLogs.recordSignInLog.mockResolvedValue({} as never);
 
       await expect(service.signIn(signInDto, session)).rejects.toThrow(
-        UnauthorizedException,
+        InvalidCredentialsException,
       );
       expect(bcryptMock.compare).toHaveBeenCalled();
     });

@@ -3,8 +3,8 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
-  UnauthorizedException,
 } from '@nestjs/common';
+import { InvalidCredentialsException } from '../../common/exceptions/invalid-credentials.exception';
 import { SignUpDto } from './dto/signup.dto';
 import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
@@ -139,7 +139,7 @@ export class AuthService {
           this.logger.error({ error: logError }, 'signIn'),
         );
 
-      throw new UnauthorizedException('Credenciais inválidas.');
+      throw new InvalidCredentialsException();
     }
 
     try {

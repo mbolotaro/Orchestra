@@ -1,5 +1,4 @@
 import {
-  ConflictException,
   HttpException,
   Injectable,
   InternalServerErrorException,
@@ -11,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserInput } from './types/create-user.type';
 import { PublicUser, PublicUserSchema } from '@orchestra/schemas';
 import { getPrismaError } from '../prisma/helpers/get-prisma-error.helper';
+import { EmailAlreadyExistsException } from '../../common/exceptions/email-already-exists.exception';
 import { TransactionClient } from '../../generated/prisma/internal/prismaNamespace';
 import { User } from '../../generated/prisma/client';
 
@@ -52,9 +52,7 @@ export class UsersService {
       const errorInfo = getPrismaError(error);
 
       if (errorInfo.kind === 'unique' && errorInfo.field === 'email') {
-        throw new ConflictException(
-          'Já existe um usuário com este e-mail cadastrado.',
-        );
+        throw new EmailAlreadyExistsException();
       }
 
       throw new InternalServerErrorException(

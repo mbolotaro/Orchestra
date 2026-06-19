@@ -1,5 +1,4 @@
 import {
-  ConflictException,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
@@ -10,6 +9,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../users.service';
 import type { CreateUserInput } from '../types/create-user.type';
 import { PublicUser } from '@orchestra/schemas';
+import { EmailAlreadyExistsException } from '../../../common/exceptions/email-already-exists.exception';
 
 const passwordInput: CreateUserInput = {
   kind: 'password',
@@ -81,7 +81,7 @@ describe('UsersService', () => {
       expect(prisma.user.create).not.toHaveBeenCalled();
     });
 
-    it('error: throws ConflictException when email already exists (P2002)', async () => {
+    it('error: throws EmailAlreadyExistsException when email already exists (P2002)', async () => {
       const p2002 = new Prisma.PrismaClientKnownRequestError(
         'Unique constraint failed',
         {
@@ -93,7 +93,7 @@ describe('UsersService', () => {
       prisma.user.create.mockRejectedValue(p2002);
 
       await expect(service.create(passwordInput)).rejects.toThrow(
-        ConflictException,
+        EmailAlreadyExistsException,
       );
     });
 
