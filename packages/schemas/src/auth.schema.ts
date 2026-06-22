@@ -27,3 +27,9 @@ export const SignInSchema = z.object({
     email: z.string().min(1).max(MAX_USER_EMAIL),
     password: z.string().min(1).max(MAX_USER_PASSWORD)
 })
+
+export const VerifyEmailSchema = z.object({
+    token: z.string().min(1, 'Token de verificação obrigatório')
+})
+
+export type VerifyEmail = z.infer<typeof VerifyEmailSchema>

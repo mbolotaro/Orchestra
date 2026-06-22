@@ -8,8 +8,14 @@ import {
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { AuthCookieService } from '../auth-cookie.service';
+import { ALLOW_UNVERIFIED_KEY } from '../decorators/allow-unverified.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { ScopeUpgradeNeededException } from '../exceptions/scope-upgrade-needed.exception';
 import { TokenService } from '../token.service';
+import {
+  AccessTokenPayload,
+  AccessTokenScope,
+} from '../types/access-token.type';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -36,13 +42,29 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException('Não autenticado.');
     }
 
+    let payload: AccessTokenPayload;
     try {
-      const payload = await this.tokenService.verifyAccess(token);
-      req.user = { sub: payload.sub };
-      return true;
+      payload = await this.tokenService.verifyAccess(token);
     } catch (error) {
       this.logger.debug({ error }, 'canActivate');
       throw new UnauthorizedException('Sessão inválida ou expirada.');
     }
+
+    if (payload.scope === AccessTokenScope.Unverified) {
+      const allowUnverified = this.reflector.getAllAndOverride<boolean>(
+        ALLOW_UNVERIFIED_KEY,
+        [ctx.getHandler(), ctx.getClass()],
+      );
+
+      if (!allowUnverified) {
+        throw new ScopeUpgradeNeededException({
+          currentScope: payload.scope,
+          requiredScope: AccessTokenScope.Full,
+        });
+      }
+    }
+
+    req.user = { sub: payload.sub, scope: payload.scope };
+    return true;
   }
 }

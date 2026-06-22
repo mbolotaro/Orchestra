@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { EnvService } from '../env/env.service';
 import {
   AccessTokenPayload,
+  AccessTokenScope,
   RefreshTokenPayload,
 } from './types/access-token.type';
 
@@ -13,8 +14,8 @@ export class TokenService {
     private readonly env: EnvService,
   ) {}
 
-  async signAccess(sub: string): Promise<string> {
-    const payload: AccessTokenPayload = { sub, type: 'access' };
+  async signAccess(sub: string, scope: AccessTokenScope): Promise<string> {
+    const payload: AccessTokenPayload = { sub, scope, type: 'access' };
 
     return await this.jwt.signAsync(payload, {
       expiresIn: this.env.get('JWT_ACCESS_EXPIRATION'),

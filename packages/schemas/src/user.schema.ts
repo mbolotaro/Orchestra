@@ -15,7 +15,8 @@ export const PublicUserSchema = z.object({
     id: z.uuidv7(),
     firstName: z.string(),
     lastName: z.string(),
-    email: z.email()
+    email: z.email(),
+    isEmailVerified: z.boolean(),
 })
 
 export type PublicUser = z.infer<typeof PublicUserSchema>

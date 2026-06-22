@@ -16,8 +16,11 @@ import { RefreshTokenService } from './refresh-token.service';
 import { TokenService } from './token.service';
 import { AuthSession } from './types/auth-session.type';
 import { SignInDto } from './dto/signin.dto';
-import { PublicAuth, PublicUserSchema } from '@orchestra/schemas';
+import { PublicAuth, PublicUser, PublicUserSchema } from '@orchestra/schemas';
 import { RefreshTokenReuseException } from './exceptions/refresh-token-reuse.exception';
+import { AccessTokenScope } from './types/access-token.type';
+import { EmailVerificationTokenService } from './email-verification-token.service';
+import { InvalidVerifyTokenException } from './exceptions/invalid-verify-token.exception';
 
 @Injectable()
 export class AuthService {
@@ -29,6 +32,7 @@ export class AuthService {
     private readonly authLogService: AuthLogsService,
     private readonly tokenService: TokenService,
     private readonly refreshTokenService: RefreshTokenService,
+    private readonly emailVerificationTokenService: EmailVerificationTokenService,
   ) {}
 
   async signUp(
@@ -75,7 +79,10 @@ export class AuthService {
         },
       );
 
-      const accessToken = await this.tokenService.signAccess(user.id);
+      const accessToken = await this.tokenService.signAccess(
+        user.id,
+        AccessTokenScope.Unverified,
+      );
 
       return {
         accessToken,
@@ -148,7 +155,14 @@ export class AuthService {
         session,
       );
 
-      const accessToken = await this.tokenService.signAccess(user.id);
+      const accessTokenScope = user.isEmailVerified
+        ? AccessTokenScope.Full
+        : AccessTokenScope.Unverified;
+
+      const accessToken = await this.tokenService.signAccess(
+        user.id,
+        accessTokenScope,
+      );
 
       await this.authLogService
         .recordSignInLog({
@@ -166,7 +180,7 @@ export class AuthService {
       return {
         refreshToken,
         accessToken,
-        user: PublicUserSchema.parse(user),
+        user: PublicUserSchema.parse(user satisfies PublicUser),
       };
     } catch (error) {
       this.logger.error({ error, email: signInDto.email }, 'signIn');
@@ -235,10 +249,16 @@ export class AuthService {
       const { userId, token: refreshToken } =
         await this.refreshTokenService.rotate(token, session);
 
-      const [user, accessToken] = await Promise.all([
-        this.usersService.getById(userId),
-        this.tokenService.signAccess(userId),
-      ]);
+      const user = await this.usersService.getById(userId);
+
+      const accessTokenScope = user.isEmailVerified
+        ? AccessTokenScope.Full
+        : AccessTokenScope.Unverified;
+
+      const accessToken = await this.tokenService.signAccess(
+        userId,
+        accessTokenScope,
+      );
 
       await this.authLogService
         .recordRefreshLog({
@@ -281,6 +301,51 @@ export class AuthService {
         );
 
       throw error;
+    }
+  }
+
+  async verifyEmail(
+    rawToken: string,
+    session: SessionInfoPayload,
+  ): Promise<void> {
+    const now = new Date();
+
+    try {
+      const { email, userId } =
+        await this.emailVerificationTokenService.consume(rawToken);
+
+      await this.usersService.markEmailAsVerified(userId, email);
+      await this.authLogService.recordVerifyEmailLog({
+        status: AuthStatus.Success,
+        email,
+        userId,
+        ipAddress: session.ip,
+        userAgent: session.userAgent,
+        occurredAt: now,
+      });
+    } catch (error) {
+      this.logger.error({ error }, 'verifyEmail');
+
+      if (error instanceof InvalidVerifyTokenException) {
+        await this.authLogService
+          .recordVerifyEmailLog({
+            status: AuthStatus.InvalidVerifyToken,
+            ipAddress: session.ip,
+            userAgent: session.userAgent,
+            email: error.email,
+            userId: error.userId,
+            occurredAt: now,
+          })
+          .catch((error: unknown) =>
+            this.logger.error({ error }, 'verifyEmail'),
+          );
+      }
+
+      if (error instanceof HttpException) throw error;
+
+      throw new InternalServerErrorException(
+        'Não foi possível verificar email.',
+      );
     }
   }
 }

@@ -24,6 +24,7 @@ const publicUser: PublicUser = {
   firstName: 'Mario',
   lastName: 'Souza',
   email: 'mario@test.com',
+  isEmailVerified: false,
 };
 
 const dbUser = {
@@ -185,6 +186,57 @@ describe('UsersService', () => {
       await expect(service.findRawByEmail('x@y.com')).rejects.toThrow(
         InternalServerErrorException,
       );
+    });
+  });
+
+  describe('markEmailAsVerified', () => {
+    it('happy path: updates user.isEmailVerified when id+email match and not verified yet', async () => {
+      prisma.user.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.markEmailAsVerified(publicUser.id, publicUser.email);
+
+      expect(prisma.user.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: publicUser.id,
+          email: publicUser.email,
+          isEmailVerified: false,
+        },
+        data: { isEmailVerified: true },
+      });
+    });
+
+    it('happy path: uses tx client when provided', async () => {
+      const tx = mockDeep<PrismaService>();
+      tx.user.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.markEmailAsVerified(publicUser.id, publicUser.email, tx);
+
+      expect(tx.user.updateMany).toHaveBeenCalled();
+      expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('edge case: no-op when user already verified (count === 0)', async () => {
+      prisma.user.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.markEmailAsVerified(publicUser.id, publicUser.email),
+      ).resolves.toBeUndefined();
+    });
+
+    it('edge case: no-op when email does not match (user changed email)', async () => {
+      prisma.user.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.markEmailAsVerified(publicUser.id, 'old@email.com'),
+      ).resolves.toBeUndefined();
+    });
+
+    it('error: throws InternalServerErrorException when prisma fails', async () => {
+      prisma.user.updateMany.mockRejectedValue(new Error('db down'));
+
+      await expect(
+        service.markEmailAsVerified(publicUser.id, publicUser.email),
+      ).rejects.toThrow(InternalServerErrorException);
     });
   });
 });

@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -28,6 +23,7 @@ model User {
 
   oAuthAccounts OAuthAccount[]
   refreshTokens RefreshToken[]
+  emailVerificationTokens EmailVerificationToken[]
 
   @@unique([email], where: { deletedAt: null })
   @@map("users")
@@ -61,6 +57,7 @@ enum AuthAction {
   SignIn @map("sign_in")
   SignOut @map("sign_out")
   Refresh @map("refresh")
+  VerifyEmail @map("verify_email")
 
   @@map("auth_action")
 }
@@ -72,6 +69,7 @@ enum AuthStatus {
   WrongPassword @map("wrong_password")
   NoPasswordHash @map("no_password_hash")
   Reuse @map("reuse")
+  InvalidVerifyToken @map("invalid_verify_token")
   @@map("auth_status")
 }
 
@@ -110,4 +108,19 @@ model RefreshToken {
   @@index([jti])
 
   @@map("refresh_tokens")
+}
+
+model EmailVerificationToken {
+   id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @db.Uuid @map("user_id")
+  email     String    @db.VarChar(254)
+  tokenHash String    @unique @db.VarChar(64) @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, usedAt])
+  @@map("email_verification_tokens")
 }

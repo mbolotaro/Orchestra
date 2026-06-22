@@ -19,9 +19,11 @@ import { ZodSerializerDto } from 'nestjs-zod';
 import { PublicAuthDto } from './dto/public-auth.dto';
 import { SignInDto } from './dto/signin.dto';
 import { Public } from './decorators/public.decorator';
+import { AllowUnverified } from './decorators/allow-unverified.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { type RequestUser } from './types/request-user.type';
 import { PublicAuth } from '@orchestra/schemas';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -101,6 +103,17 @@ export class AuthController {
     this.authCookieService.clear(res);
   }
 
+  @Public()
+  @Post('verify')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async verifyEmail(
+    @Body() body: VerifyEmailDto,
+    @SessionInfo() sessionInfo: SessionInfoPayload,
+  ): Promise<void> {
+    await this.authService.verifyEmail(body.token, sessionInfo);
+  }
+
+  @AllowUnverified()
   @Get('me')
   @ZodSerializerDto(PublicAuthDto)
   async me(@CurrentUser() { sub }: RequestUser): Promise<PublicAuth> {

@@ -43,7 +43,7 @@ export class UsersService {
         omit: { passwordHash: true },
       });
 
-      return PublicUserSchema.parse(createdUser);
+      return PublicUserSchema.parse(createdUser satisfies PublicUser);
     } catch (error) {
       if (error instanceof HttpException) throw error;
 
@@ -73,7 +73,7 @@ export class UsersService {
         throw new NotFoundException('Usuário não encontrado!');
       }
 
-      return PublicUserSchema.parse(user);
+      return PublicUserSchema.parse(user satisfies PublicUser);
     } catch (error) {
       this.logger.error({ error, userId }, 'getById');
 
@@ -98,6 +98,38 @@ export class UsersService {
 
       throw new InternalServerErrorException(
         'Não foi possível buscar usuário pelo e-mail!',
+      );
+    }
+  }
+
+  async markEmailAsVerified(
+    userId: string,
+    expectedEmail: string,
+    tx?: TransactionClient,
+  ): Promise<void> {
+    const client = tx ?? this.prismaService;
+
+    try {
+      const { count } = await client.user.updateMany({
+        where: {
+          id: userId,
+          email: expectedEmail,
+          isEmailVerified: false,
+        },
+        data: { isEmailVerified: true },
+      });
+
+      if (count === 0) {
+        this.logger.warn(
+          { userId, expectedEmail },
+          'markEmailAsVerified: no-op (user already verified or email changed)',
+        );
+      }
+    } catch (error) {
+      this.logger.error({ error, userId }, 'markEmailAsVerified');
+
+      throw new InternalServerErrorException(
+        'Não foi possível marcar e-mail como verificado.',
       );
     }
   }

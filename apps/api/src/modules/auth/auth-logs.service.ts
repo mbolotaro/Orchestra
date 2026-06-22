@@ -117,4 +117,30 @@ export class AuthLogsService {
       );
     }
   }
+
+  async recordVerifyEmailLog(
+    recordAuthLog: RecordAuthLog,
+    tx?: TransactionClient,
+  ) {
+    try {
+      const client = tx ?? this.prismaService;
+      return await client.authLog.create({
+        data: {
+          action: AuthAction.VerifyEmail,
+          status: recordAuthLog.status,
+          email: recordAuthLog.email,
+          userId: recordAuthLog.userId,
+          occurredAt: recordAuthLog.occurredAt,
+          ipAddress: recordAuthLog.ipAddress,
+          userAgent: recordAuthLog.userAgent,
+        },
+      });
+    } catch (error) {
+      this.logger.error({ error }, 'recordVerifyEmailLog');
+
+      throw new InternalServerErrorException(
+        'Não foi possível registrar verificação de email.',
+      );
+    }
+  }
 }

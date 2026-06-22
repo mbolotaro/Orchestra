@@ -18,6 +18,9 @@ export const EnvSchema = z.object({
   DB_PORT: z.string().regex(/^\d+$/, 'DB_PORT must be a number'),
   DB_HOST: z.string().optional(),
 
+  EMAIL_VERIFICATION_PEPPER: z.string().min(32),
+  EMAIL_VERIFICATION_EXPIRATION: duration('24h'),
+
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   JWT_ACCESS_EXPIRATION: duration('15m'),
   JWT_REFRESH_EXPIRATION: duration('7d'),

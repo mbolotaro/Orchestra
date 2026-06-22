@@ -6,6 +6,7 @@ export enum ErrorCode {
   RefreshTokenReuse = 'REFRESH_TOKEN_REUSE',
   EmailNotVerified = 'EMAIL_NOT_VERIFIED',
   ScopeUpgradeNeeded = 'SCOPE_UPGRADE_NEEDED',
+  InvalidVerifyToken = 'INVALID_VERIFY_TOKEN',
 
   EmailAlreadyExists = 'EMAIL_ALREADY_EXISTS',
   UserNotFound = 'USER_NOT_FOUND',

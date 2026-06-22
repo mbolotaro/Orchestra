@@ -15,7 +15,10 @@ import { AuthService } from '../auth.service';
 import { RefreshTokenReuseException } from '../exceptions/refresh-token-reuse.exception';
 import { RefreshTokenService } from '../refresh-token.service';
 import { TokenService } from '../token.service';
+import { AccessTokenScope } from '../types/access-token.type';
 import type { SessionInfoPayload } from '../types/session-info.type';
+import { EmailVerificationTokenService } from '../email-verification-token.service';
+import { InvalidVerifyTokenException } from '../exceptions/invalid-verify-token.exception';
 
 jest.mock('bcrypt');
 const bcryptMock = bcrypt as jest.Mocked<typeof bcrypt>;
@@ -30,6 +33,7 @@ const publicUser = {
   firstName: 'Mario',
   lastName: 'Souza',
   email: 'mario@test.com',
+  isEmailVerified: false,
 };
 
 describe('AuthService', () => {
@@ -39,6 +43,7 @@ describe('AuthService', () => {
   let authLogs: DeepMockProxy<AuthLogsService>;
   let tokens: DeepMockProxy<TokenService>;
   let refreshTokens: DeepMockProxy<RefreshTokenService>;
+  let verifyTokens: DeepMockProxy<EmailVerificationTokenService>;
 
   beforeEach(async () => {
     prisma = mockDeep<PrismaService>();
@@ -46,6 +51,7 @@ describe('AuthService', () => {
     authLogs = mockDeep<AuthLogsService>();
     tokens = mockDeep<TokenService>();
     refreshTokens = mockDeep<RefreshTokenService>();
+    verifyTokens = mockDeep<EmailVerificationTokenService>();
 
     bcryptMock.hash.mockReset();
     bcryptMock.compare.mockReset();
@@ -62,6 +68,7 @@ describe('AuthService', () => {
         { provide: AuthLogsService, useValue: authLogs },
         { provide: TokenService, useValue: tokens },
         { provide: RefreshTokenService, useValue: refreshTokens },
+        { provide: EmailVerificationTokenService, useValue: verifyTokens },
       ],
     }).compile();
 
@@ -124,7 +131,10 @@ describe('AuthService', () => {
         session,
         prisma,
       );
-      expect(tokens.signAccess).toHaveBeenCalledWith(publicUser.id);
+      expect(tokens.signAccess).toHaveBeenCalledWith(
+        publicUser.id,
+        AccessTokenScope.Unverified,
+      );
     });
 
     it('error: rethrows EmailAlreadyExistsException from usersService.create', async () => {
@@ -346,6 +356,85 @@ describe('AuthService', () => {
           status: AuthStatus.Failed,
         }),
       );
+    });
+  });
+
+  describe('verifyEmail', () => {
+    it('happy path: consumes token, marks email verified and logs Success', async () => {
+      verifyTokens.consume.mockResolvedValue({
+        userId: publicUser.id,
+        email: publicUser.email,
+      });
+      users.markEmailAsVerified.mockResolvedValue(undefined);
+      authLogs.recordVerifyEmailLog.mockResolvedValue({} as never);
+
+      await service.verifyEmail('raw-token', session);
+
+      expect(verifyTokens.consume).toHaveBeenCalledWith('raw-token');
+      expect(users.markEmailAsVerified).toHaveBeenCalledWith(
+        publicUser.id,
+        publicUser.email,
+      );
+      expect(authLogs.recordVerifyEmailLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: publicUser.id,
+          email: publicUser.email,
+          status: AuthStatus.Success,
+        }),
+      );
+    });
+
+    it('error: rethrows InvalidVerifyTokenException and logs InvalidVerifyToken with context', async () => {
+      verifyTokens.consume.mockRejectedValue(
+        new InvalidVerifyTokenException(publicUser.id, publicUser.email),
+      );
+      authLogs.recordVerifyEmailLog.mockResolvedValue({} as never);
+
+      await expect(
+        service.verifyEmail('expired-token', session),
+      ).rejects.toThrow(InvalidVerifyTokenException);
+      expect(authLogs.recordVerifyEmailLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: publicUser.id,
+          email: publicUser.email,
+          status: AuthStatus.InvalidVerifyToken,
+        }),
+      );
+      expect(users.markEmailAsVerified).not.toHaveBeenCalled();
+    });
+
+    it('error: rethrows InvalidVerifyTokenException without context when record is unknown', async () => {
+      verifyTokens.consume.mockRejectedValue(new InvalidVerifyTokenException());
+      authLogs.recordVerifyEmailLog.mockResolvedValue({} as never);
+
+      await expect(
+        service.verifyEmail('garbage-token', session),
+      ).rejects.toThrow(InvalidVerifyTokenException);
+      expect(authLogs.recordVerifyEmailLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: undefined,
+          email: undefined,
+          status: AuthStatus.InvalidVerifyToken,
+        }),
+      );
+    });
+
+    it('error: throws InternalServerErrorException for unexpected error', async () => {
+      verifyTokens.consume.mockRejectedValue(new Error('db down'));
+
+      await expect(service.verifyEmail('raw-token', session)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+      expect(users.markEmailAsVerified).not.toHaveBeenCalled();
+    });
+
+    it('edge case: still throws even if InvalidVerifyToken audit log itself fails', async () => {
+      verifyTokens.consume.mockRejectedValue(new InvalidVerifyTokenException());
+      authLogs.recordVerifyEmailLog.mockRejectedValue(new Error('log down'));
+
+      await expect(
+        service.verifyEmail('expired-token', session),
+      ).rejects.toThrow(InvalidVerifyTokenException);
     });
   });
 });

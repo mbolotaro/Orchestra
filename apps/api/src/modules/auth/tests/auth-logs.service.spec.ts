@@ -155,4 +155,34 @@ describe('AuthLogsService', () => {
       );
     });
   });
+
+  describe('recordVerifyEmailLog', () => {
+    it('happy path: persists AuthLog with action VerifyEmail', async () => {
+      prisma.authLog.create.mockResolvedValue({ id: 'log-5' } as never);
+
+      await service.recordVerifyEmailLog(baseRecord);
+
+      expect(prisma.authLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ action: AuthAction.VerifyEmail }),
+      });
+    });
+
+    it('happy path: uses tx client when provided', async () => {
+      const tx = mockDeep<PrismaService>();
+      tx.authLog.create.mockResolvedValue({ id: 'log-tx' } as never);
+
+      await service.recordVerifyEmailLog(baseRecord, tx);
+
+      expect(tx.authLog.create).toHaveBeenCalled();
+      expect(prisma.authLog.create).not.toHaveBeenCalled();
+    });
+
+    it('error: throws InternalServerErrorException when prisma.create fails', async () => {
+      prisma.authLog.create.mockRejectedValue(new Error('db down'));
+
+      await expect(service.recordVerifyEmailLog(baseRecord)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+  });
 });

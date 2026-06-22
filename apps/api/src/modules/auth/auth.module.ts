@@ -11,6 +11,7 @@ import { EnvService } from '../env/env.service';
 import { RefreshTokenService } from './refresh-token.service';
 import { AuthCookieService } from './auth-cookie.service';
 import { AuthGuard } from './guards/auth.guard';
+import { EmailVerificationTokenService } from './email-verification-token.service';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { AuthGuard } from './guards/auth.guard';
       provide: APP_GUARD,
       useClass: AuthGuard,
     },
+    EmailVerificationTokenService,
   ],
 })
 export class AuthModule {}
