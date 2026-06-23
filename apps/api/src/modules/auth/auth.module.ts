@@ -12,10 +12,27 @@ import { RefreshTokenService } from './refresh-token.service';
 import { AuthCookieService } from './auth-cookie.service';
 import { AuthGuard } from './guards/auth.guard';
 import { EmailVerificationTokenService } from './email-verification-token.service';
+import { EmailModule } from '../email/email.module';
+import { BullModule } from '@nestjs/bullmq';
+import { AUTH_EMAIL_QUEUE } from './auth.constants';
+import { AuthProcessor } from './auth-email.processor';
 
 @Module({
   imports: [
     UsersModule,
+    EmailModule,
+    BullModule.registerQueue({
+      name: AUTH_EMAIL_QUEUE,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 5_000, // 5s, 10s, 20s
+        },
+        removeOnComplete: { age: 24 * 3600, count: 1000 }, // 1 day or 1000 items
+        removeOnFail: { age: 7 * 24 * 3600 }, // 7 days
+      },
+    }),
     JwtModule.registerAsync({
       imports: [EnvModule],
       inject: [EnvService],
@@ -37,6 +54,7 @@ import { EmailVerificationTokenService } from './email-verification-token.servic
       useClass: AuthGuard,
     },
     EmailVerificationTokenService,
+    AuthProcessor,
   ],
 })
 export class AuthModule {}

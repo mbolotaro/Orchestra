@@ -8,9 +8,29 @@ import { AuthModule } from './modules/auth/auth.module';
 import { EnvModule } from './modules/env/env.module';
 import { PrismaModule } from './modules/prisma/prisma.module';
 import { UsersModule } from './modules/users/users.module';
+import { EmailModule } from './modules/email/email.module';
+import { BullModule } from '@nestjs/bullmq';
+import { EnvService } from './modules/env/env.service';
 
 @Module({
-  imports: [EnvModule, PrismaModule, UsersModule, AuthModule],
+  imports: [
+    EnvModule,
+    BullModule.forRootAsync({
+      imports: [EnvModule],
+      inject: [EnvService],
+      useFactory: (env: EnvService) => ({
+        connection: {
+          host: env.get('REDIS_HOST'),
+          port: parseInt(env.get('REDIS_PORT')),
+          password: env.get('REDIS_PASSWORD'),
+        },
+      }),
+    }),
+    PrismaModule,
+    UsersModule,
+    AuthModule,
+    EmailModule,
+  ],
   controllers: [AppController],
   providers: [
     {

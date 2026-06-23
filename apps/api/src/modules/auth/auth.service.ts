@@ -21,12 +21,18 @@ import { RefreshTokenReuseException } from './exceptions/refresh-token-reuse.exc
 import { AccessTokenScope } from './types/access-token.type';
 import { EmailVerificationTokenService } from './email-verification-token.service';
 import { InvalidVerifyTokenException } from './exceptions/invalid-verify-token.exception';
+import { Queue } from 'bullmq';
+import { InjectQueue } from '@nestjs/bullmq';
+import { AUTH_EMAIL_QUEUE } from './auth.constants';
+import { AuthEmailJobType, VerifyEmailJobPayload } from './types/auth-job.type';
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
   constructor(
+    @InjectQueue(AUTH_EMAIL_QUEUE)
+    private readonly authEmailQueue: Queue,
     private readonly prismaService: PrismaService,
     private readonly usersService: UsersService,
     private readonly authLogService: AuthLogsService,
@@ -44,8 +50,8 @@ export class AuthService {
     try {
       const passwordHash = await bcrypt.hash(signUpDto.password, 12);
 
-      const { user, refreshToken } = await this.prismaService.$transaction(
-        async (tx) => {
+      const { user, refreshToken, verifyEmailToken } =
+        await this.prismaService.$transaction(async (tx) => {
           const user = await this.usersService.create(
             {
               kind: 'password',
@@ -69,20 +75,42 @@ export class AuthService {
             tx,
           );
 
+          const verifyEmailToken =
+            await this.emailVerificationTokenService.issue(
+              user.id,
+              user.email,
+              tx,
+            );
+
           const { token: refreshToken } = await this.refreshTokenService.issue(
             user.id,
             session,
             tx,
           );
 
-          return { user, refreshToken };
-        },
-      );
+          return {
+            user,
+            refreshToken,
+            verifyEmailToken: verifyEmailToken.rawToken,
+          };
+        });
 
       const accessToken = await this.tokenService.signAccess(
         user.id,
         AccessTokenScope.Unverified,
       );
+
+      const verifyEmailBody: VerifyEmailJobPayload = {
+        to: user.email,
+        token: verifyEmailToken,
+        userName: user.firstName,
+      };
+
+      await this.authEmailQueue
+        .add(AuthEmailJobType.VerifyEmail, verifyEmailBody)
+        .catch((error: unknown) =>
+          this.logger.error({ error }, 'signUp:verifyEmailJob'),
+        );
 
       return {
         accessToken,

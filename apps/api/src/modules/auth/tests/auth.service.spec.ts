@@ -19,6 +19,10 @@ import { AccessTokenScope } from '../types/access-token.type';
 import type { SessionInfoPayload } from '../types/session-info.type';
 import { EmailVerificationTokenService } from '../email-verification-token.service';
 import { InvalidVerifyTokenException } from '../exceptions/invalid-verify-token.exception';
+import { getQueueToken } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
+import { AUTH_EMAIL_QUEUE } from '../auth.constants';
+import { AuthEmailJobType } from '../types/auth-job.type';
 
 jest.mock('bcrypt');
 const bcryptMock = bcrypt as jest.Mocked<typeof bcrypt>;
@@ -44,6 +48,7 @@ describe('AuthService', () => {
   let tokens: DeepMockProxy<TokenService>;
   let refreshTokens: DeepMockProxy<RefreshTokenService>;
   let verifyTokens: DeepMockProxy<EmailVerificationTokenService>;
+  let authEmailQueue: DeepMockProxy<Queue>;
 
   beforeEach(async () => {
     prisma = mockDeep<PrismaService>();
@@ -52,6 +57,7 @@ describe('AuthService', () => {
     tokens = mockDeep<TokenService>();
     refreshTokens = mockDeep<RefreshTokenService>();
     verifyTokens = mockDeep<EmailVerificationTokenService>();
+    authEmailQueue = mockDeep<Queue>();
 
     bcryptMock.hash.mockReset();
     bcryptMock.compare.mockReset();
@@ -69,6 +75,7 @@ describe('AuthService', () => {
         { provide: TokenService, useValue: tokens },
         { provide: RefreshTokenService, useValue: refreshTokens },
         { provide: EmailVerificationTokenService, useValue: verifyTokens },
+        { provide: getQueueToken(AUTH_EMAIL_QUEUE), useValue: authEmailQueue },
       ],
     }).compile();
 
@@ -91,11 +98,13 @@ describe('AuthService', () => {
       bcryptMock.hash.mockResolvedValue('hashed-password' as never);
       users.create.mockResolvedValue(publicUser);
       authLogs.recordSignUpLog.mockResolvedValue({} as never);
+      verifyTokens.issue.mockResolvedValue({ rawToken: 'raw-verify-token' });
       refreshTokens.issue.mockResolvedValue({
         token: 'refresh.token',
         jti: 'jti-abc',
       });
       tokens.signAccess.mockResolvedValue('access.token');
+      authEmailQueue.add.mockResolvedValue({} as never);
     }
 
     it('happy path: creates user, records audit log, issues tokens and returns AuthSession', async () => {
@@ -134,6 +143,35 @@ describe('AuthService', () => {
       expect(tokens.signAccess).toHaveBeenCalledWith(
         publicUser.id,
         AccessTokenScope.Unverified,
+      );
+      expect(verifyTokens.issue).toHaveBeenCalledWith(
+        publicUser.id,
+        publicUser.email,
+        prisma,
+      );
+      expect(authEmailQueue.add).toHaveBeenCalledWith(
+        AuthEmailJobType.VerifyEmail,
+        expect.objectContaining({
+          to: publicUser.email,
+          userName: publicUser.firstName,
+          token: 'raw-verify-token',
+        }),
+      );
+    });
+
+    it('edge case: signUp succeeds even when authEmailQueue.add fails (best-effort)', async () => {
+      setupHappyPath();
+      authEmailQueue.add.mockRejectedValue(new Error('redis down'));
+
+      const result = await service.signUp(signUpDto, session);
+
+      expect(result).toEqual({
+        user: publicUser,
+        accessToken: 'access.token',
+        refreshToken: 'refresh.token',
+      });
+      expect(authLogs.recordSignUpLog).not.toHaveBeenCalledWith(
+        expect.objectContaining({ status: AuthStatus.Failed }),
       );
     });
 
