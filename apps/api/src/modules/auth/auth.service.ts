@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   HttpException,
   Injectable,
   InternalServerErrorException,
@@ -25,6 +26,7 @@ import { Queue } from 'bullmq';
 import { InjectQueue } from '@nestjs/bullmq';
 import { AUTH_EMAIL_QUEUE } from './auth.constants';
 import { AuthEmailJobType, VerifyEmailJobPayload } from './types/auth-job.type';
+import { Prisma } from '../../generated/prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -50,8 +52,8 @@ export class AuthService {
     try {
       const passwordHash = await bcrypt.hash(signUpDto.password, 12);
 
-      const { user, refreshToken, verifyEmailToken } =
-        await this.prismaService.$transaction(async (tx) => {
+      const { user, refreshToken } = await this.prismaService.$transaction(
+        async (tx) => {
           const user = await this.usersService.create(
             {
               kind: 'password',
@@ -75,12 +77,7 @@ export class AuthService {
             tx,
           );
 
-          const verifyEmailToken =
-            await this.emailVerificationTokenService.issue(
-              user.id,
-              user.email,
-              tx,
-            );
+          await this.sendVerifyEmail(user, tx);
 
           const { token: refreshToken } = await this.refreshTokenService.issue(
             user.id,
@@ -91,26 +88,14 @@ export class AuthService {
           return {
             user,
             refreshToken,
-            verifyEmailToken: verifyEmailToken.rawToken,
           };
-        });
+        },
+      );
 
       const accessToken = await this.tokenService.signAccess(
         user.id,
         AccessTokenScope.Unverified,
       );
-
-      const verifyEmailBody: VerifyEmailJobPayload = {
-        to: user.email,
-        token: verifyEmailToken,
-        userName: user.firstName,
-      };
-
-      await this.authEmailQueue
-        .add(AuthEmailJobType.VerifyEmail, verifyEmailBody)
-        .catch((error: unknown) =>
-          this.logger.error({ error }, 'signUp:verifyEmailJob'),
-        );
 
       return {
         accessToken,
@@ -373,6 +358,56 @@ export class AuthService {
 
       throw new InternalServerErrorException(
         'Não foi possível verificar email.',
+      );
+    }
+  }
+
+  async resendVerifyEmail(userId: string) {
+    try {
+      const user = await this.usersService.getById(userId);
+
+      if (user.isEmailVerified)
+        throw new ConflictException('A sua conta já está verificada.');
+
+      await this.sendVerifyEmail(user);
+    } catch (error) {
+      this.logger.error({ error }, 'resendVerify');
+
+      if (error instanceof HttpException) throw error;
+
+      throw new InternalServerErrorException(
+        'Não foi possível reenviar email de verificação.',
+      );
+    }
+  }
+
+  private async sendVerifyEmail(
+    user: PublicUser,
+    tx?: Prisma.TransactionClient,
+  ) {
+    try {
+      const { rawToken } = await this.emailVerificationTokenService.issue(
+        user.id,
+        user.email,
+        tx,
+      );
+
+      const verifyEmailBody: VerifyEmailJobPayload = {
+        to: user.email,
+        token: rawToken,
+        userName: user.firstName,
+      };
+
+      await this.authEmailQueue
+        .add(AuthEmailJobType.VerifyEmail, verifyEmailBody)
+        .catch((error: unknown) => this.logger.error({ error }, 'sendVerify'));
+    } catch (error) {
+      this.logger.error({ error }, 'sendVerify');
+
+      if (error instanceof HttpException) throw error;
+
+      throw new InternalServerErrorException(
+        'Não foi possível enviar e-mail de verificação.',
       );
     }
   }

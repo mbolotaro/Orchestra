@@ -17,6 +17,11 @@
       "cache": false,
       "persistent": true,
       "dependsOn": ["^build"]
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": []
     }
   }
 }

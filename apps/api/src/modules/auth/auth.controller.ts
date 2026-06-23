@@ -24,7 +24,6 @@ import { CurrentUser } from './decorators/current-user.decorator';
 import { type RequestUser } from './types/request-user.type';
 import { PublicAuth } from '@orchestra/schemas';
 import { VerifyEmailDto } from './dto/verify-email.dto';
-
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -111,6 +110,13 @@ export class AuthController {
     @SessionInfo() sessionInfo: SessionInfoPayload,
   ): Promise<void> {
     await this.authService.verifyEmail(body.token, sessionInfo);
+  }
+
+  @AllowUnverified()
+  @Post('resend-verify')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async resendVerify(@CurrentUser() { sub }: RequestUser): Promise<void> {
+    await this.authService.resendVerifyEmail(sub);
   }
 
   @AllowUnverified()

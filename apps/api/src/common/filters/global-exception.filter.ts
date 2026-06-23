@@ -35,6 +35,15 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     res.setHeader('X-Request-Id', requestId);
+
+    if (
+      body.statusCode === HttpStatus.TOO_MANY_REQUESTS &&
+      typeof body.details?.retryAfterSeconds === 'number' &&
+      body.details.retryAfterSeconds > 0
+    ) {
+      res.setHeader('Retry-After', String(body.details.retryAfterSeconds));
+    }
+
     res.status(body.statusCode).json(body);
   }
 

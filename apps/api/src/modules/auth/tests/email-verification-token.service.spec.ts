@@ -5,6 +5,8 @@ import { EnvService } from '../../env/env.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailVerificationTokenService } from '../email-verification-token.service';
 import { InvalidVerifyTokenException } from '../exceptions/invalid-verify-token.exception';
+import { RateLimitedException } from '../../../common/exceptions/rate-limited.exception';
+import { VERIFY_EMAIL_COOLDOWN_MS } from '../auth.constants';
 
 const USER_ID = '0193b3c0-0000-7000-8000-000000000000';
 const EMAIL = 'mario@test.com';
@@ -60,6 +62,7 @@ describe('EmailVerificationTokenService', () => {
 
   describe('issue', () => {
     it('happy path: invalidates previous tokens AND creates a new one in transaction', async () => {
+      prisma.emailVerificationToken.findFirst.mockResolvedValue(null);
       prisma.emailVerificationToken.updateMany.mockResolvedValue({ count: 2 });
       prisma.emailVerificationToken.create.mockResolvedValue({} as never);
 
@@ -83,7 +86,24 @@ describe('EmailVerificationTokenService', () => {
       });
     });
 
+    it('happy path: queries for recent unused tokens with createdAt cooldown window', async () => {
+      prisma.emailVerificationToken.findFirst.mockResolvedValue(null);
+      prisma.emailVerificationToken.updateMany.mockResolvedValue({ count: 0 });
+      prisma.emailVerificationToken.create.mockResolvedValue({} as never);
+
+      await service.issue(USER_ID, EMAIL);
+
+      expect(prisma.emailVerificationToken.findFirst).toHaveBeenCalledWith({
+        where: {
+          userId: USER_ID,
+          usedAt: null,
+          createdAt: { gte: expect.any(Date) },
+        },
+      });
+    });
+
     it('happy path: rawToken is unique on each call', async () => {
+      prisma.emailVerificationToken.findFirst.mockResolvedValue(null);
       prisma.emailVerificationToken.updateMany.mockResolvedValue({ count: 0 });
       prisma.emailVerificationToken.create.mockResolvedValue({} as never);
 
@@ -93,10 +113,72 @@ describe('EmailVerificationTokenService', () => {
       expect(a).not.toBe(b);
     });
 
+    it('error: throws RateLimitedException when a recent unused token exists', async () => {
+      prisma.emailVerificationToken.findFirst.mockResolvedValue({
+        id: 'recent-1',
+        userId: USER_ID,
+        email: EMAIL,
+        tokenHash: 'hash',
+        usedAt: null,
+        expiresAt: new Date(Date.now() + 3_600_000),
+        createdAt: new Date(Date.now() - 20_000),
+      });
+
+      await expect(service.issue(USER_ID, EMAIL)).rejects.toThrow(
+        RateLimitedException,
+      );
+      expect(prisma.emailVerificationToken.create).not.toHaveBeenCalled();
+      expect(prisma.emailVerificationToken.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('error: RateLimitedException carries retryAfterSeconds in details', async () => {
+      const elapsedMs = 20_000;
+      prisma.emailVerificationToken.findFirst.mockResolvedValue({
+        id: 'recent-1',
+        userId: USER_ID,
+        email: EMAIL,
+        tokenHash: 'hash',
+        usedAt: null,
+        expiresAt: new Date(Date.now() + 3_600_000),
+        createdAt: new Date(Date.now() - elapsedMs),
+      });
+
+      try {
+        await service.issue(USER_ID, EMAIL);
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(RateLimitedException);
+        const e = err as RateLimitedException;
+        const retry = e.details?.retryAfterSeconds as number;
+        const expected = Math.ceil(
+          (VERIFY_EMAIL_COOLDOWN_MS - elapsedMs) / 1000,
+        );
+        expect(retry).toBeGreaterThan(0);
+        expect(Math.abs(retry - expected)).toBeLessThanOrEqual(1);
+      }
+    });
+
     it('error: throws InternalServerErrorException when DB fails', async () => {
+      prisma.emailVerificationToken.findFirst.mockResolvedValue(null);
       prisma.$transaction.mockRejectedValue(new Error('db down'));
 
       await expect(service.issue(USER_ID, EMAIL)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+
+    it('edge case: rethrows RateLimitedException without wrapping it (HttpException passthrough)', async () => {
+      prisma.emailVerificationToken.findFirst.mockResolvedValue({
+        id: 'recent-1',
+        userId: USER_ID,
+        email: EMAIL,
+        tokenHash: 'hash',
+        usedAt: null,
+        expiresAt: new Date(Date.now() + 3_600_000),
+        createdAt: new Date(Date.now() - 10_000),
+      });
+
+      await expect(service.issue(USER_ID, EMAIL)).rejects.not.toThrow(
         InternalServerErrorException,
       );
     });

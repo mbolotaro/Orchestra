@@ -1,9 +1,11 @@
 import {
+  ConflictException,
   InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { EmailAlreadyExistsException } from '../../../common/exceptions/email-already-exists.exception';
 import { InvalidCredentialsException } from '../../../common/exceptions/invalid-credentials.exception';
+import { RateLimitedException } from '../../../common/exceptions/rate-limited.exception';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
 import { mockDeep, type DeepMockProxy } from 'jest-mock-extended';
@@ -473,6 +475,74 @@ describe('AuthService', () => {
       await expect(
         service.verifyEmail('expired-token', session),
       ).rejects.toThrow(InvalidVerifyTokenException);
+    });
+  });
+
+  describe('resendVerifyEmail', () => {
+    it('happy path: issues new token and enqueues job for unverified user', async () => {
+      users.getById.mockResolvedValue(publicUser);
+      verifyTokens.issue.mockResolvedValue({ rawToken: 'raw-verify-token' });
+      authEmailQueue.add.mockResolvedValue({} as never);
+
+      await service.resendVerifyEmail(publicUser.id);
+
+      expect(verifyTokens.issue).toHaveBeenCalledWith(
+        publicUser.id,
+        publicUser.email,
+        undefined,
+      );
+      expect(authEmailQueue.add).toHaveBeenCalledWith(
+        AuthEmailJobType.VerifyEmail,
+        expect.objectContaining({
+          to: publicUser.email,
+          userName: publicUser.firstName,
+          token: 'raw-verify-token',
+        }),
+      );
+    });
+
+    it('error: throws ConflictException when user is already verified', async () => {
+      users.getById.mockResolvedValue({ ...publicUser, isEmailVerified: true });
+
+      await expect(service.resendVerifyEmail(publicUser.id)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(verifyTokens.issue).not.toHaveBeenCalled();
+      expect(authEmailQueue.add).not.toHaveBeenCalled();
+    });
+
+    it('error: rethrows RateLimitedException from token service without wrapping', async () => {
+      users.getById.mockResolvedValue(publicUser);
+      verifyTokens.issue.mockRejectedValue(
+        new RateLimitedException('Aguarde mais 30s para enviar outro email.', {
+          retryAfterSeconds: 30,
+        }),
+      );
+
+      await expect(service.resendVerifyEmail(publicUser.id)).rejects.toThrow(
+        RateLimitedException,
+      );
+      expect(authEmailQueue.add).not.toHaveBeenCalled();
+    });
+
+    it('error: wraps unknown error as InternalServerErrorException', async () => {
+      users.getById.mockResolvedValue(publicUser);
+      verifyTokens.issue.mockRejectedValue(new Error('db down'));
+
+      await expect(service.resendVerifyEmail(publicUser.id)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+
+    it('edge case: still succeeds when queue.add fails (best-effort enqueue)', async () => {
+      users.getById.mockResolvedValue(publicUser);
+      verifyTokens.issue.mockResolvedValue({ rawToken: 'raw-verify-token' });
+      authEmailQueue.add.mockRejectedValue(new Error('redis down'));
+
+      await expect(
+        service.resendVerifyEmail(publicUser.id),
+      ).resolves.toBeUndefined();
+      expect(verifyTokens.issue).toHaveBeenCalled();
     });
   });
 });
