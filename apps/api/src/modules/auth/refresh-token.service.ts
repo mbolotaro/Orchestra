@@ -136,9 +136,13 @@ export class RefreshTokenService {
     }
   }
 
-  async revokeAllForUser(userId: string): Promise<void> {
+  async revokeAllForUser(
+    userId: string,
+    tx?: TransactionClient,
+  ): Promise<void> {
+    const client = tx ?? this.prismaService;
     try {
-      await this.prismaService.refreshToken.updateMany({
+      await client.refreshToken.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: new Date() },
       });

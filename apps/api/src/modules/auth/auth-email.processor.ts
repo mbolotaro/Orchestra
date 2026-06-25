@@ -1,7 +1,7 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { AUTH_EMAIL_QUEUE } from './auth.constants';
 import { Job, UnrecoverableError } from 'bullmq';
-import { renderVerifyEmail } from '@orchestra/emails';
+import { renderVerifyEmail, renderResetPassword } from '@orchestra/emails';
 import { EnvService } from '../env/env.service';
 import {
   AuthEmailJob,
@@ -46,7 +46,18 @@ export class AuthProcessor extends WorkerHost {
     });
   }
 
-  resetPassword(job: Job<ResetPasswordJobPayload>) {
-    console.error('Reset password not implemented, ', job);
+  async resetPassword(job: Job<ResetPasswordJobPayload>) {
+    const frontendUrl = this.env.get('FRONTEND_URL');
+    const resetPasswordUrl = `${frontendUrl}/reset-password?token=${job.data.token}`;
+    const content = await renderResetPassword({
+      userName: job.data.userName,
+      resetPasswordUrl,
+    });
+
+    await this.email.send({
+      to: [job.data.to],
+      content,
+      subject: 'Solicitação de Alteração de Senha',
+    });
   }
 }

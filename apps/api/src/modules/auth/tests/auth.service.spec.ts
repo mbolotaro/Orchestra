@@ -21,6 +21,7 @@ import { AccessTokenScope } from '../types/access-token.type';
 import type { SessionInfoPayload } from '../types/session-info.type';
 import { EmailVerificationTokenService } from '../email-verification-token.service';
 import { InvalidVerifyTokenException } from '../exceptions/invalid-verify-token.exception';
+import { PasswordResetTokenService } from '../password-reset-token.service';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { AUTH_EMAIL_QUEUE } from '../auth.constants';
@@ -50,6 +51,7 @@ describe('AuthService', () => {
   let tokens: DeepMockProxy<TokenService>;
   let refreshTokens: DeepMockProxy<RefreshTokenService>;
   let verifyTokens: DeepMockProxy<EmailVerificationTokenService>;
+  let resetTokens: DeepMockProxy<PasswordResetTokenService>;
   let authEmailQueue: DeepMockProxy<Queue>;
 
   beforeEach(async () => {
@@ -59,6 +61,7 @@ describe('AuthService', () => {
     tokens = mockDeep<TokenService>();
     refreshTokens = mockDeep<RefreshTokenService>();
     verifyTokens = mockDeep<EmailVerificationTokenService>();
+    resetTokens = mockDeep<PasswordResetTokenService>();
     authEmailQueue = mockDeep<Queue>();
 
     bcryptMock.hash.mockReset();
@@ -77,6 +80,7 @@ describe('AuthService', () => {
         { provide: TokenService, useValue: tokens },
         { provide: RefreshTokenService, useValue: refreshTokens },
         { provide: EmailVerificationTokenService, useValue: verifyTokens },
+        { provide: PasswordResetTokenService, useValue: resetTokens },
         { provide: getQueueToken(AUTH_EMAIL_QUEUE), useValue: authEmailQueue },
       ],
     }).compile();
@@ -483,8 +487,9 @@ describe('AuthService', () => {
       users.getById.mockResolvedValue(publicUser);
       verifyTokens.issue.mockResolvedValue({ rawToken: 'raw-verify-token' });
       authEmailQueue.add.mockResolvedValue({} as never);
+      authLogs.recordResendVerifyEmailLog.mockResolvedValue({} as never);
 
-      await service.resendVerifyEmail(publicUser.id);
+      await service.resendVerifyEmail(publicUser.id, session);
 
       expect(verifyTokens.issue).toHaveBeenCalledWith(
         publicUser.id,
@@ -499,16 +504,30 @@ describe('AuthService', () => {
           token: 'raw-verify-token',
         }),
       );
+      expect(authLogs.recordResendVerifyEmailLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: publicUser.id,
+          email: publicUser.email,
+          status: AuthStatus.Success,
+        }),
+      );
     });
 
     it('error: throws ConflictException when user is already verified', async () => {
       users.getById.mockResolvedValue({ ...publicUser, isEmailVerified: true });
+      authLogs.recordResendVerifyEmailLog.mockResolvedValue({} as never);
 
-      await expect(service.resendVerifyEmail(publicUser.id)).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(
+        service.resendVerifyEmail(publicUser.id, session),
+      ).rejects.toThrow(ConflictException);
       expect(verifyTokens.issue).not.toHaveBeenCalled();
       expect(authEmailQueue.add).not.toHaveBeenCalled();
+      expect(authLogs.recordResendVerifyEmailLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: publicUser.id,
+          status: AuthStatus.Failed,
+        }),
+      );
     });
 
     it('error: rethrows RateLimitedException from token service without wrapping', async () => {
@@ -518,8 +537,9 @@ describe('AuthService', () => {
           retryAfterSeconds: 30,
         }),
       );
+      authLogs.recordResendVerifyEmailLog.mockResolvedValue({} as never);
 
-      await expect(service.resendVerifyEmail(publicUser.id)).rejects.toThrow(
+      await expect(service.resendVerifyEmail(publicUser.id, session)).rejects.toThrow(
         RateLimitedException,
       );
       expect(authEmailQueue.add).not.toHaveBeenCalled();
@@ -528,8 +548,9 @@ describe('AuthService', () => {
     it('error: wraps unknown error as InternalServerErrorException', async () => {
       users.getById.mockResolvedValue(publicUser);
       verifyTokens.issue.mockRejectedValue(new Error('db down'));
+      authLogs.recordResendVerifyEmailLog.mockResolvedValue({} as never);
 
-      await expect(service.resendVerifyEmail(publicUser.id)).rejects.toThrow(
+      await expect(service.resendVerifyEmail(publicUser.id, session)).rejects.toThrow(
         InternalServerErrorException,
       );
     });
@@ -538,9 +559,10 @@ describe('AuthService', () => {
       users.getById.mockResolvedValue(publicUser);
       verifyTokens.issue.mockResolvedValue({ rawToken: 'raw-verify-token' });
       authEmailQueue.add.mockRejectedValue(new Error('redis down'));
+      authLogs.recordResendVerifyEmailLog.mockResolvedValue({} as never);
 
       await expect(
-        service.resendVerifyEmail(publicUser.id),
+        service.resendVerifyEmail(publicUser.id, session),
       ).resolves.toBeUndefined();
       expect(verifyTokens.issue).toHaveBeenCalled();
     });

@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   HttpException,
   Injectable,
   InternalServerErrorException,
@@ -83,6 +84,30 @@ export class UsersService {
     }
   }
 
+  async findByEmail(
+    email: string,
+    tx?: TransactionClient,
+  ): Promise<PublicUser | null> {
+    const client = tx ?? this.prismaService;
+
+    try {
+      const user = await client.user.findFirst({
+        where: { email },
+        omit: { passwordHash: true },
+      });
+
+      if (!user) return null;
+
+      return PublicUserSchema.parse(user satisfies PublicUser);
+    } catch (error) {
+      this.logger.error({ error, email }, 'findByEmail');
+
+      throw new InternalServerErrorException(
+        'Não foi possível buscar usuário pelo e-mail!',
+      );
+    }
+  }
+
   async findRawByEmail(
     email: string,
     tx?: TransactionClient,
@@ -130,6 +155,37 @@ export class UsersService {
 
       throw new InternalServerErrorException(
         'Não foi possível marcar e-mail como verificado.',
+      );
+    }
+  }
+
+  async changePassword(
+    userId: string,
+    expectedEmail: string,
+    newPasswordHash: string,
+    tx?: TransactionClient,
+  ): Promise<void> {
+    const client = tx ?? this.prismaService;
+
+    try {
+      const { count } = await client.user.updateMany({
+        where: { id: userId, email: expectedEmail },
+        data: { passwordHash: newPasswordHash },
+      });
+
+      if (count === 0) {
+        this.logger.warn(
+          { userId, expectedEmail },
+          'changePassword: no-op (user not found or email changed)',
+        );
+        throw new ConflictException('Não foi possível alterar a senha.');
+      }
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+
+      this.logger.error({ error, userId }, 'changePassword');
+      throw new InternalServerErrorException(
+        'Não foi possível alterar a senha.',
       );
     }
   }

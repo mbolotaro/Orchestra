@@ -25,8 +25,15 @@ import { InvalidVerifyTokenException } from './exceptions/invalid-verify-token.e
 import { Queue } from 'bullmq';
 import { InjectQueue } from '@nestjs/bullmq';
 import { AUTH_EMAIL_QUEUE } from './auth.constants';
-import { AuthEmailJobType, VerifyEmailJobPayload } from './types/auth-job.type';
+import {
+  AuthEmailJobType,
+  ResetPasswordJobPayload,
+  VerifyEmailJobPayload,
+} from './types/auth-job.type';
 import { Prisma } from '../../generated/prisma/client';
+import { PasswordResetTokenService } from './password-reset-token.service';
+import { RateLimitedException } from '../../common/exceptions/rate-limited.exception';
+import { InvalidResetPasswordTokenException } from './exceptions/invalid-reset-password-token.exception';
 
 @Injectable()
 export class AuthService {
@@ -41,6 +48,7 @@ export class AuthService {
     private readonly tokenService: TokenService,
     private readonly refreshTokenService: RefreshTokenService,
     private readonly emailVerificationTokenService: EmailVerificationTokenService,
+    private readonly passwordResetTokenService: PasswordResetTokenService,
   ) {}
 
   async signUp(
@@ -362,7 +370,12 @@ export class AuthService {
     }
   }
 
-  async resendVerifyEmail(userId: string) {
+  async resendVerifyEmail(
+    userId: string,
+    session: SessionInfoPayload,
+  ): Promise<void> {
+    const now = new Date();
+
     try {
       const user = await this.usersService.getById(userId);
 
@@ -370,14 +383,189 @@ export class AuthService {
         throw new ConflictException('A sua conta já está verificada.');
 
       await this.sendVerifyEmail(user);
+
+      await this.authLogService
+        .recordResendVerifyEmailLog({
+          userId: user.id,
+          email: user.email,
+          status: AuthStatus.Success,
+          ipAddress: session.ip,
+          userAgent: session.userAgent,
+          occurredAt: now,
+        })
+        .catch((logError: unknown) =>
+          this.logger.error({ error: logError }, 'resendVerify'),
+        );
     } catch (error) {
       this.logger.error({ error }, 'resendVerify');
+
+      await this.authLogService
+        .recordResendVerifyEmailLog({
+          userId,
+          status: AuthStatus.Failed,
+          ipAddress: session.ip,
+          userAgent: session.userAgent,
+          occurredAt: now,
+        })
+        .catch((logError: unknown) =>
+          this.logger.error({ error: logError }, 'resendVerify'),
+        );
 
       if (error instanceof HttpException) throw error;
 
       throw new InternalServerErrorException(
         'Não foi possível reenviar email de verificação.',
       );
+    }
+  }
+
+  async forgotPassword(
+    email: string,
+    session: SessionInfoPayload,
+  ): Promise<void> {
+    const now = new Date();
+
+    try {
+      const user = await this.usersService.findByEmail(email);
+
+      if (!user) {
+        await this.authLogService
+          .recordForgotPasswordLog({
+            email,
+            status: AuthStatus.UserNotFound,
+            ipAddress: session.ip,
+            userAgent: session.userAgent,
+            occurredAt: now,
+          })
+          .catch((logError: unknown) =>
+            this.logger.error({ error: logError }, 'forgotPassword'),
+          );
+        return;
+      }
+
+      const { rawToken } = await this.passwordResetTokenService.issue(
+        user.id,
+        user.email,
+      );
+
+      await this.authLogService
+        .recordForgotPasswordLog({
+          userId: user.id,
+          email: user.email,
+          status: AuthStatus.Success,
+          ipAddress: session.ip,
+          userAgent: session.userAgent,
+          occurredAt: now,
+        })
+        .catch((logError: unknown) =>
+          this.logger.error({ error: logError }, 'forgotPassword'),
+        );
+
+      const resetPasswordBody: ResetPasswordJobPayload = {
+        to: user.email,
+        token: rawToken,
+        userName: user.firstName,
+      };
+
+      await this.authEmailQueue
+        .add(AuthEmailJobType.ResetPassword, resetPasswordBody)
+        .catch((error: unknown) =>
+          this.logger.error({ error }, 'forgotPassword:resetPasswordJob'),
+        );
+    } catch (error) {
+      if (error instanceof RateLimitedException) {
+        this.logger.warn(
+          { error, email },
+          'forgotPassword: cooldown hit, silenced for anti-enumeration',
+        );
+
+        await this.authLogService
+          .recordForgotPasswordLog({
+            email,
+            status: AuthStatus.Failed,
+            ipAddress: session.ip,
+            userAgent: session.userAgent,
+            occurredAt: now,
+          })
+          .catch((logError: unknown) =>
+            this.logger.error({ error: logError }, 'forgotPassword'),
+          );
+        return;
+      }
+
+      this.logger.error(
+        { error, email },
+        'forgotPassword: silent error (anti-enumeration)',
+      );
+
+      await this.authLogService
+        .recordForgotPasswordLog({
+          email,
+          status: AuthStatus.Failed,
+          ipAddress: session.ip,
+          userAgent: session.userAgent,
+          occurredAt: now,
+        })
+        .catch((logError: unknown) =>
+          this.logger.error({ error: logError }, 'forgotPassword'),
+        );
+    }
+  }
+
+  async resetPassword(
+    rawToken: string,
+    newPassword: string,
+    sessionInfo: SessionInfoPayload,
+  ): Promise<void> {
+    const now = new Date();
+
+    try {
+      const { email, userId } =
+        await this.passwordResetTokenService.consume(rawToken);
+
+      const newPasswordHash = await bcrypt.hash(newPassword, 12);
+
+      await this.prismaService.$transaction(async (tx) => {
+        await this.usersService.changePassword(
+          userId,
+          email,
+          newPasswordHash,
+          tx,
+        );
+        await this.refreshTokenService.revokeAllForUser(userId, tx);
+        await this.authLogService.recordPasswordResetLog(
+          {
+            email,
+            userId,
+            status: AuthStatus.Success,
+            ipAddress: sessionInfo.ip,
+            userAgent: sessionInfo.userAgent,
+            occurredAt: now,
+          },
+          tx,
+        );
+      });
+    } catch (error) {
+      this.logger.error({ error }, 'resetPassword');
+
+      if (error instanceof InvalidResetPasswordTokenException) {
+        await this.authLogService
+          .recordPasswordResetLog({
+            status: AuthStatus.InvalidResetPasswordToken,
+            email: error.email,
+            userId: error.userId,
+            ipAddress: sessionInfo.ip,
+            userAgent: sessionInfo.userAgent,
+            occurredAt: now,
+          })
+          .catch((logError: unknown) =>
+            this.logger.error({ error: logError }, 'resetPassword'),
+          );
+      }
+
+      if (error instanceof HttpException) throw error;
+
+      throw new InternalServerErrorException('Não foi possível alterar senha.');
     }
   }
 

@@ -26,7 +26,7 @@ export const Layout = ({ preview, children }: LayoutProps) => (
         <Container className="mx-auto my-10 max-w-[560px] rounded-lg border bg-surface p-8">
           <Section>{children}</Section>
 
-          <Hr className="my-8" />
+          <Hr className="my-1" />
 
           <Text className="text-xs text-muted">
             Você recebeu este e-mail porque tem uma conta no Orchestra.

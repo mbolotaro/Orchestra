@@ -27,6 +27,7 @@ model User {
 
   @@unique([email], where: { deletedAt: null })
   @@map("users")
+  passwordResetTokens PasswordResetToken[]
 }
 
 enum OAuthAccountType {
@@ -58,6 +59,9 @@ enum AuthAction {
   SignOut @map("sign_out")
   Refresh @map("refresh")
   VerifyEmail @map("verify_email")
+  ResendVerifyEmail @map("resend_verify_email")
+  ForgotPassword @map("forgot_password")
+  PasswordReset @map("password_reset")
 
   @@map("auth_action")
 }
@@ -70,6 +74,7 @@ enum AuthStatus {
   NoPasswordHash @map("no_password_hash")
   Reuse @map("reuse")
   InvalidVerifyToken @map("invalid_verify_token")
+  InvalidResetPasswordToken @map("invalid_reset_password_token")
   @@map("auth_status")
 }
 
@@ -111,7 +116,7 @@ model RefreshToken {
 }
 
 model EmailVerificationToken {
-   id        String    @id @default(uuid(7)) @db.Uuid
+  id        String    @id @default(uuid(7)) @db.Uuid
   userId    String    @db.Uuid @map("user_id")
   email     String    @db.VarChar(254)
   tokenHash String    @unique @db.VarChar(64) @map("token_hash")
@@ -123,4 +128,19 @@ model EmailVerificationToken {
 
   @@index([userId, usedAt])
   @@map("email_verification_tokens")
+}
+
+model PasswordResetToken {
+  id String @id @default(uuid(7)) @db.Uuid
+  userId String @db.Uuid @map("user_id")
+  email String @db.VarChar(254)
+  tokenHash String @unique @db.VarChar(64) @map("token_hash")
+  usedAt DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }

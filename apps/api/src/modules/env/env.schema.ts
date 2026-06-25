@@ -21,6 +21,9 @@ export const EnvSchema = z.object({
   EMAIL_VERIFICATION_PEPPER: z.string().min(32),
   EMAIL_VERIFICATION_EXPIRATION: duration('24h'),
 
+  PASSWORD_RESET_PEPPER: z.string().min(32),
+  PASSWORD_RESET_EXPIRATION: duration('1h'),
+
   EMAIL_API_KEY: z.string(),
   EMAIL: z.email(),
 

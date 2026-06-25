@@ -6,21 +6,21 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EnvService } from '../env/env.service';
+import {
+  IssuePasswordResetResponse,
+  ResetPasswordTokenPayload,
+} from './types/password-reset-token.type';
 import { Prisma } from '../../generated/prisma/client';
 import { createHash, randomBytes } from 'crypto';
 import { durationToMs } from '../../common/helpers/parse-duration.helper';
-import { msToHuman } from '../../common/helpers/ms-to-human.helper';
-import { InvalidVerifyTokenException } from './exceptions/invalid-verify-token.exception';
-import {
-  IssueVerifyEmailResponse,
-  VerifyEmailTokenPayload,
-} from './types/verify-token.type';
+import { RESET_PASSWORD_COOLDOWN_MS } from './auth.constants';
 import { RateLimitedException } from '../../common/exceptions/rate-limited.exception';
-import { VERIFY_EMAIL_COOLDOWN_MS } from './auth.constants';
+import { msToHuman } from '../../common/helpers/ms-to-human.helper';
+import { InvalidResetPasswordTokenException } from './exceptions/invalid-reset-password-token.exception';
 
 @Injectable()
-export class EmailVerificationTokenService {
-  private readonly logger = new Logger(EmailVerificationTokenService.name);
+export class PasswordResetTokenService {
+  private readonly logger = new Logger(PasswordResetTokenService.name);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -31,43 +31,40 @@ export class EmailVerificationTokenService {
     userId: string,
     email: string,
     tx?: Prisma.TransactionClient,
-  ): Promise<IssueVerifyEmailResponse> {
+  ): Promise<IssuePasswordResetResponse> {
     try {
       const client = tx ?? this.prisma;
       const now = new Date();
       const rawToken = randomBytes(32).toString('base64url');
       const tokenHash = this.hash(rawToken);
+
       const expiresAt = new Date(
-        now.getTime() +
-          durationToMs(this.env.get('EMAIL_VERIFICATION_EXPIRATION')),
+        now.getTime() + durationToMs(this.env.get('PASSWORD_RESET_EXPIRATION')),
       );
 
-      const recent = await client.emailVerificationToken.findFirst({
+      const recent = await client.passwordResetToken.findFirst({
         where: {
           userId,
           usedAt: null,
-          createdAt: {
-            gte: new Date(now.getTime() - VERIFY_EMAIL_COOLDOWN_MS),
-          },
+          createdAt: { gte: new Date(now.getTime() - 60_000) },
         },
       });
 
       if (recent) {
         const elapsedMs = now.getTime() - recent.createdAt.getTime();
-        const remainingMs = VERIFY_EMAIL_COOLDOWN_MS - elapsedMs;
+        const remainingMs = RESET_PASSWORD_COOLDOWN_MS - elapsedMs;
         throw new RateLimitedException(
-          `Aguarde mais ${msToHuman(remainingMs)} para enviar outro email.`,
-          { retryAfterSeconds: Math.ceil(remainingMs / 1000) },
+          `Aguarde mais ${msToHuman(remainingMs)} para pedir nova redefinição.`,
         );
       }
 
       await client.$transaction(async (tx) => {
-        await tx.emailVerificationToken.updateMany({
+        await tx.passwordResetToken.updateMany({
           where: { userId, usedAt: null },
           data: { usedAt: now },
         });
 
-        await tx.emailVerificationToken.create({
+        await tx.passwordResetToken.create({
           data: { userId, email, tokenHash, expiresAt },
         });
       });
@@ -84,19 +81,22 @@ export class EmailVerificationTokenService {
     }
   }
 
-  async consume(rawToken: string): Promise<VerifyEmailTokenPayload> {
+  async consume(rawToken: string): Promise<ResetPasswordTokenPayload> {
     try {
       const tokenHash = this.hash(rawToken);
       const now = new Date();
 
-      const record = await this.prisma.emailVerificationToken.findUnique({
+      const record = await this.prisma.passwordResetToken.findUnique({
         where: { tokenHash },
       });
 
       if (!record || record.usedAt || record.expiresAt < now)
-        throw new InvalidVerifyTokenException(record?.userId, record?.email);
+        throw new InvalidResetPasswordTokenException(
+          record?.userId,
+          record?.email,
+        );
 
-      await this.prisma.emailVerificationToken.update({
+      await this.prisma.passwordResetToken.update({
         where: { id: record.id },
         data: { usedAt: now },
       });
@@ -113,8 +113,8 @@ export class EmailVerificationTokenService {
     }
   }
 
-  private hash(rawToken: string): string {
-    const pepper = this.env.get('EMAIL_VERIFICATION_PEPPER');
+  private hash(rawToken: string) {
+    const pepper = this.env.get('PASSWORD_RESET_PEPPER');
     return createHash('sha256')
       .update(rawToken + pepper)
       .digest('hex');

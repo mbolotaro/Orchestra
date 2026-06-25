@@ -7,14 +7,14 @@ export interface VerifyEmailProps {
   verifyUrl: string;
 }
 
-export const VerifyEmail = ({ userName, verifyUrl }: VerifyEmailProps) => (
+const VerifyEmail = ({ userName, verifyUrl }: VerifyEmailProps) => (
   <Layout preview="Confirme seu e-mail no Orchestra">
     <Heading className="text-2xl font-semibold text-primary">
       Bem-vindo ao Orchestra, {userName}!
     </Heading>
 
     <Text className="text-base text-secondary">
-      Pra ativar sua conta, confirme seu endereço de e-mail clicando no botão
+      Para ativar sua conta, confirme seu endereço de e-mail clicando no botão
       abaixo. O link expira em 24 horas.
     </Text>
 

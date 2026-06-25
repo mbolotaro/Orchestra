@@ -24,6 +24,8 @@ import { CurrentUser } from './decorators/current-user.decorator';
 import { type RequestUser } from './types/request-user.type';
 import { PublicAuth } from '@orchestra/schemas';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -115,8 +117,35 @@ export class AuthController {
   @AllowUnverified()
   @Post('resend-verify')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async resendVerify(@CurrentUser() { sub }: RequestUser): Promise<void> {
-    await this.authService.resendVerifyEmail(sub);
+  async resendVerify(
+    @CurrentUser() { sub }: RequestUser,
+    @SessionInfo() session: SessionInfoPayload,
+  ): Promise<void> {
+    await this.authService.resendVerifyEmail(sub, session);
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async forgotPassword(
+    @Body() forgotPasswordDto: ForgotPasswordDto,
+    @SessionInfo() session: SessionInfoPayload,
+  ): Promise<void> {
+    await this.authService.forgotPassword(forgotPasswordDto.email, session);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async resetPassword(
+    @Body() resetPasswordDto: ResetPasswordDto,
+    @SessionInfo() session: SessionInfoPayload,
+  ) {
+    await this.authService.resetPassword(
+      resetPasswordDto.token,
+      resetPasswordDto.newPassword,
+      session,
+    );
   }
 
   @AllowUnverified()

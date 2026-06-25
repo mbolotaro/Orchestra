@@ -16,6 +16,7 @@ import { EmailModule } from '../email/email.module';
 import { BullModule } from '@nestjs/bullmq';
 import { AUTH_EMAIL_QUEUE } from './auth.constants';
 import { AuthProcessor } from './auth-email.processor';
+import { PasswordResetTokenService } from './password-reset-token.service';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { AuthProcessor } from './auth-email.processor';
     },
     EmailVerificationTokenService,
     AuthProcessor,
+    PasswordResetTokenService,
   ],
 })
 export class AuthModule {}

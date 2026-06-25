@@ -2,15 +2,15 @@ import { ErrorCode } from '@orchestra/schemas';
 import { AppException } from '../../../common/exceptions/app.exception';
 import { HttpStatus } from '@nestjs/common';
 
-export class InvalidVerifyTokenException extends AppException {
+export class InvalidResetPasswordTokenException extends AppException {
   constructor(
     public readonly userId?: string,
     public readonly email?: string,
   ) {
     super(
-      ErrorCode.InvalidVerifyToken,
+      ErrorCode.InvalidResetPasswordToken,
       HttpStatus.FORBIDDEN,
-      'Token de verificação inválido ou vencido.',
+      'Token de alteração de senha inválido ou vencido.',
     );
   }
 }

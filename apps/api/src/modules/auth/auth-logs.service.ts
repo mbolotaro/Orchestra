@@ -143,4 +143,82 @@ export class AuthLogsService {
       );
     }
   }
+
+  async recordPasswordResetLog(
+    recordAuthLog: RecordAuthLog,
+    tx?: TransactionClient,
+  ) {
+    try {
+      const client = tx ?? this.prismaService;
+      return await client.authLog.create({
+        data: {
+          action: AuthAction.PasswordReset,
+          status: recordAuthLog.status,
+          email: recordAuthLog.email,
+          userId: recordAuthLog.userId,
+          occurredAt: recordAuthLog.occurredAt,
+          ipAddress: recordAuthLog.ipAddress,
+          userAgent: recordAuthLog.userAgent,
+        },
+      });
+    } catch (error) {
+      this.logger.error({ error }, 'recordPasswordResetLog');
+
+      throw new InternalServerErrorException(
+        'Não foi possível registrar redefinição de senha.',
+      );
+    }
+  }
+
+  async recordForgotPasswordLog(
+    recordAuthLog: RecordAuthLog,
+    tx?: TransactionClient,
+  ) {
+    try {
+      const client = tx ?? this.prismaService;
+      return await client.authLog.create({
+        data: {
+          action: AuthAction.ForgotPassword,
+          status: recordAuthLog.status,
+          email: recordAuthLog.email,
+          userId: recordAuthLog.userId,
+          occurredAt: recordAuthLog.occurredAt,
+          ipAddress: recordAuthLog.ipAddress,
+          userAgent: recordAuthLog.userAgent,
+        },
+      });
+    } catch (error) {
+      this.logger.error({ error }, 'recordForgotPasswordLog');
+
+      throw new InternalServerErrorException(
+        'Não foi possível registrar solicitação de redefinição.',
+      );
+    }
+  }
+
+  async recordResendVerifyEmailLog(
+    recordAuthLog: RecordAuthLog,
+    tx?: TransactionClient,
+  ) {
+    try {
+      const client = tx ?? this.prismaService;
+      return await client.authLog.create({
+        data: {
+          action: AuthAction.ResendVerifyEmail,
+          status: recordAuthLog.status,
+          email: recordAuthLog.email,
+          userId: recordAuthLog.userId,
+          occurredAt: recordAuthLog.occurredAt,
+          ipAddress: recordAuthLog.ipAddress,
+          userAgent: recordAuthLog.userAgent,
+        },
+      });
+    } catch (error) {
+      this.logger.error({ error }, 'recordResendVerifyEmailLog');
+
+      throw new InternalServerErrorException(
+        'Não foi possível registrar reenvio de verificação.',
+      );
+    }
+  }
 }
