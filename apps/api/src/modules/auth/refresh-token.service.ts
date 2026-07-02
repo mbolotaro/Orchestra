@@ -3,6 +3,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -16,6 +17,7 @@ import { Prisma } from '../../generated/prisma/client';
 import { durationToMs } from '../../common/helpers/parse-duration.helper';
 import { RefreshTokenReuseException } from './exceptions/refresh-token-reuse.exception';
 import { TransactionClient } from '../../generated/prisma/internal/prismaNamespace';
+import { RefreshTokenSummary } from './types/refresh-token-summary.type';
 
 @Injectable()
 export class RefreshTokenService {
@@ -151,6 +153,88 @@ export class RefreshTokenService {
 
       throw new InternalServerErrorException(
         'Não foi possível revogar refresh tokens do usuário.',
+      );
+    }
+  }
+
+  async revokeSessionByIdForUser(
+    userId: string,
+    sessionId: string,
+    exceptJti?: string,
+  ): Promise<void> {
+    try {
+      const { count } = await this.prismaService.refreshToken.updateMany({
+        where: {
+          id: sessionId,
+          userId,
+          revokedAt: null,
+          ...(exceptJti ? { jti: { not: exceptJti } } : {}),
+        },
+        data: { revokedAt: new Date() },
+      });
+
+      if (count === 0) {
+        throw new NotFoundException('Sessão não encontrada.');
+      }
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+
+      this.logger.error(
+        { error, userId, sessionId },
+        'revokeSessionByIdForUser',
+      );
+
+      throw new InternalServerErrorException(
+        'Não foi possível revogar sessão.',
+      );
+    }
+  }
+
+  async revokeAllForUserExcept(
+    userId: string,
+    exceptJti: string,
+  ): Promise<void> {
+    try {
+      await this.prismaService.refreshToken.updateMany({
+        where: {
+          userId,
+          revokedAt: null,
+          jti: { not: exceptJti },
+        },
+        data: { revokedAt: new Date() },
+      });
+    } catch (error) {
+      this.logger.error({ error, userId, exceptJti }, 'revokeAllForUserExcept');
+
+      throw new InternalServerErrorException(
+        'Não foi possível revogar sessões do usuário.',
+      );
+    }
+  }
+
+  async findActiveByUser(userId: string): Promise<RefreshTokenSummary[]> {
+    try {
+      return await this.prismaService.refreshToken.findMany({
+        where: {
+          userId,
+          revokedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          jti: true,
+          createdAt: true,
+          expiresAt: true,
+          ipAddress: true,
+          userAgent: true,
+        },
+      });
+    } catch (error) {
+      this.logger.error({ error, userId }, 'findActiveByUser');
+
+      throw new InternalServerErrorException(
+        'Não foi possível listar sessões do usuário.',
       );
     }
   }

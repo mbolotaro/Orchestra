@@ -17,6 +17,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { AUTH_EMAIL_QUEUE } from './auth.constants';
 import { AuthProcessor } from './auth-email.processor';
 import { PasswordResetTokenService } from './password-reset-token.service';
+import { AuthSessionsController } from './auth-sessions.controller';
 
 @Module({
   imports: [
@@ -43,7 +44,7 @@ import { PasswordResetTokenService } from './password-reset-token.service';
       }),
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, AuthSessionsController],
   providers: [
     AuthService,
     AuthLogsService,

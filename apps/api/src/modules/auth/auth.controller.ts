@@ -140,7 +140,7 @@ export class AuthController {
   async resetPassword(
     @Body() resetPasswordDto: ResetPasswordDto,
     @SessionInfo() session: SessionInfoPayload,
-  ) {
+  ): Promise<void> {
     await this.authService.resetPassword(
       resetPasswordDto.token,
       resetPasswordDto.newPassword,

@@ -4,6 +4,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InvalidCredentialsException } from '../../common/exceptions/invalid-credentials.exception';
 import { SignUpDto } from './dto/signup.dto';
@@ -17,7 +18,14 @@ import { RefreshTokenService } from './refresh-token.service';
 import { TokenService } from './token.service';
 import { AuthSession } from './types/auth-session.type';
 import { SignInDto } from './dto/signin.dto';
-import { PublicAuth, PublicUser, PublicUserSchema } from '@orchestra/schemas';
+import {
+  PublicAuth,
+  PublicAuthSession,
+  PublicAuthSessionList,
+  PublicUser,
+  PublicUserSchema,
+} from '@orchestra/schemas';
+import { parseUA } from '../../common/helpers/parse-ua.helper';
 import { RefreshTokenReuseException } from './exceptions/refresh-token-reuse.exception';
 import { AccessTokenScope } from './types/access-token.type';
 import { EmailVerificationTokenService } from './email-verification-token.service';
@@ -30,7 +38,6 @@ import {
   ResetPasswordJobPayload,
   VerifyEmailJobPayload,
 } from './types/auth-job.type';
-import { Prisma } from '../../generated/prisma/client';
 import { PasswordResetTokenService } from './password-reset-token.service';
 import { RateLimitedException } from '../../common/exceptions/rate-limited.exception';
 import { InvalidResetPasswordTokenException } from './exceptions/invalid-reset-password-token.exception';
@@ -60,8 +67,8 @@ export class AuthService {
     try {
       const passwordHash = await bcrypt.hash(signUpDto.password, 12);
 
-      const { user, refreshToken } = await this.prismaService.$transaction(
-        async (tx) => {
+      const { user, refreshToken, verifyTokenRaw } =
+        await this.prismaService.$transaction(async (tx) => {
           const user = await this.usersService.create(
             {
               kind: 'password',
@@ -85,7 +92,12 @@ export class AuthService {
             tx,
           );
 
-          await this.sendVerifyEmail(user, tx);
+          const { rawToken: verifyTokenRaw } =
+            await this.emailVerificationTokenService.issue(
+              user.id,
+              user.email,
+              tx,
+            );
 
           const { token: refreshToken } = await this.refreshTokenService.issue(
             user.id,
@@ -96,14 +108,16 @@ export class AuthService {
           return {
             user,
             refreshToken,
+            verifyTokenRaw,
           };
-        },
-      );
+        });
 
       const accessToken = await this.tokenService.signAccess(
         user.id,
         AccessTokenScope.Unverified,
       );
+
+      await this.enqueueVerifyEmail(user, verifyTokenRaw);
 
       return {
         accessToken,
@@ -224,7 +238,10 @@ export class AuthService {
     }
   }
 
-  async signOut(refreshToken: string, session: SessionInfoPayload) {
+  async signOut(
+    refreshToken: string,
+    session: SessionInfoPayload,
+  ): Promise<void> {
     const now = new Date();
 
     const decoded = refreshToken
@@ -258,6 +275,66 @@ export class AuthService {
     return {
       user,
     };
+  }
+
+  async revokeSession(
+    userId: string,
+    sessionId: string,
+    refreshToken: string | undefined,
+  ): Promise<void> {
+    const currentJti = refreshToken
+      ? this.tokenService.decodeUnsafe(refreshToken)?.jti
+      : undefined;
+
+    await this.refreshTokenService.revokeSessionByIdForUser(
+      userId,
+      sessionId,
+      currentJti,
+    );
+  }
+
+  async revokeAllOtherSessions(
+    userId: string,
+    refreshToken: string | undefined,
+  ): Promise<void> {
+    const currentJti = refreshToken
+      ? this.tokenService.decodeUnsafe(refreshToken)?.jti
+      : null;
+
+    if (!currentJti) {
+      throw new UnauthorizedException('Sessão atual não identificada.');
+    }
+
+    await this.refreshTokenService.revokeAllForUserExcept(userId, currentJti);
+  }
+
+  async listSessions(
+    userId: string,
+    refreshToken?: string,
+  ): Promise<PublicAuthSessionList> {
+    const currentJti = refreshToken
+      ? this.tokenService.decodeUnsafe(refreshToken)?.jti
+      : null;
+
+    const rows = await this.refreshTokenService.findActiveByUser(userId);
+
+    const sessions = rows.map<PublicAuthSession>((row) => {
+      const { browser, os } = parseUA(row.userAgent);
+
+      return {
+        id: row.id,
+        isCurrent: row.jti === currentJti,
+        lastActivityAt: row.createdAt.toISOString(),
+        expiresAt: row.expiresAt.toISOString(),
+        ipAddress: row.ipAddress,
+        device: {
+          browser: browser ?? 'Unknown',
+          os: os ?? 'Unknown',
+        },
+      };
+    });
+
+    return { sessions };
   }
 
   async refresh(
@@ -382,7 +459,12 @@ export class AuthService {
       if (user.isEmailVerified)
         throw new ConflictException('A sua conta já está verificada.');
 
-      await this.sendVerifyEmail(user);
+      const { rawToken } = await this.emailVerificationTokenService.issue(
+        user.id,
+        user.email,
+      );
+
+      await this.enqueueVerifyEmail(user, rawToken);
 
       await this.authLogService
         .recordResendVerifyEmailLog({
@@ -569,34 +651,20 @@ export class AuthService {
     }
   }
 
-  private async sendVerifyEmail(
+  private async enqueueVerifyEmail(
     user: PublicUser,
-    tx?: Prisma.TransactionClient,
-  ) {
-    try {
-      const { rawToken } = await this.emailVerificationTokenService.issue(
-        user.id,
-        user.email,
-        tx,
+    rawToken: string,
+  ): Promise<void> {
+    const payload: VerifyEmailJobPayload = {
+      to: user.email,
+      token: rawToken,
+      userName: user.firstName,
+    };
+
+    await this.authEmailQueue
+      .add(AuthEmailJobType.VerifyEmail, payload)
+      .catch((error: unknown) =>
+        this.logger.error({ error }, 'enqueueVerifyEmail'),
       );
-
-      const verifyEmailBody: VerifyEmailJobPayload = {
-        to: user.email,
-        token: rawToken,
-        userName: user.firstName,
-      };
-
-      await this.authEmailQueue
-        .add(AuthEmailJobType.VerifyEmail, verifyEmailBody)
-        .catch((error: unknown) => this.logger.error({ error }, 'sendVerify'));
-    } catch (error) {
-      this.logger.error({ error }, 'sendVerify');
-
-      if (error instanceof HttpException) throw error;
-
-      throw new InternalServerErrorException(
-        'Não foi possível enviar e-mail de verificação.',
-      );
-    }
   }
 }

@@ -48,3 +48,20 @@ export const ResetPasswordSchema = z.object({
 })
 
 export type ResetPassword = z.infer<typeof ResetPasswordSchema>
+
+export const PublicAuthSessionSchema = z.object({
+    id: z.uuidv7(),
+    isCurrent: z.boolean(),
+    lastActivityAt: z.iso.datetime(),
+    expiresAt: z.iso.datetime(),
+    ipAddress: z.string().nullable(),
+    device: z.object({ browser: z.string().nullable(), os: z.string().nullable() })
+})
+
+export type PublicAuthSession = z.infer<typeof PublicAuthSessionSchema>
+
+export const PublicAuthSessionListSchema = z.object({
+    sessions: PublicAuthSessionSchema.array()
+})
+
+export type PublicAuthSessionList = z.infer<typeof PublicAuthSessionListSchema>;

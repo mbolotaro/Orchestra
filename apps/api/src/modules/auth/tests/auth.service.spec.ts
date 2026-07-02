@@ -22,6 +22,7 @@ import type { SessionInfoPayload } from '../types/session-info.type';
 import { EmailVerificationTokenService } from '../email-verification-token.service';
 import { InvalidVerifyTokenException } from '../exceptions/invalid-verify-token.exception';
 import { PasswordResetTokenService } from '../password-reset-token.service';
+import { InvalidResetPasswordTokenException } from '../exceptions/invalid-reset-password-token.exception';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { AUTH_EMAIL_QUEUE } from '../auth.constants';
@@ -494,7 +495,6 @@ describe('AuthService', () => {
       expect(verifyTokens.issue).toHaveBeenCalledWith(
         publicUser.id,
         publicUser.email,
-        undefined,
       );
       expect(authEmailQueue.add).toHaveBeenCalledWith(
         AuthEmailJobType.VerifyEmail,
@@ -539,9 +539,9 @@ describe('AuthService', () => {
       );
       authLogs.recordResendVerifyEmailLog.mockResolvedValue({} as never);
 
-      await expect(service.resendVerifyEmail(publicUser.id, session)).rejects.toThrow(
-        RateLimitedException,
-      );
+      await expect(
+        service.resendVerifyEmail(publicUser.id, session),
+      ).rejects.toThrow(RateLimitedException);
       expect(authEmailQueue.add).not.toHaveBeenCalled();
     });
 
@@ -550,9 +550,9 @@ describe('AuthService', () => {
       verifyTokens.issue.mockRejectedValue(new Error('db down'));
       authLogs.recordResendVerifyEmailLog.mockResolvedValue({} as never);
 
-      await expect(service.resendVerifyEmail(publicUser.id, session)).rejects.toThrow(
-        InternalServerErrorException,
-      );
+      await expect(
+        service.resendVerifyEmail(publicUser.id, session),
+      ).rejects.toThrow(InternalServerErrorException);
     });
 
     it('edge case: still succeeds when queue.add fails (best-effort enqueue)', async () => {
@@ -565,6 +565,282 @@ describe('AuthService', () => {
         service.resendVerifyEmail(publicUser.id, session),
       ).resolves.toBeUndefined();
       expect(verifyTokens.issue).toHaveBeenCalled();
+    });
+  });
+
+  describe('forgotPassword', () => {
+    function setupHappyPath() {
+      users.findByEmail.mockResolvedValue(publicUser);
+      resetTokens.issue.mockResolvedValue({ rawToken: 'raw-reset-token' });
+      authLogs.recordForgotPasswordLog.mockResolvedValue({} as never);
+      authEmailQueue.add.mockResolvedValue({} as never);
+    }
+
+    it('happy path: issues reset token, logs Success and enqueues reset email', async () => {
+      setupHappyPath();
+
+      await service.forgotPassword(publicUser.email, session);
+
+      expect(resetTokens.issue).toHaveBeenCalledWith(
+        publicUser.id,
+        publicUser.email,
+      );
+      expect(authLogs.recordForgotPasswordLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: publicUser.id,
+          email: publicUser.email,
+          status: AuthStatus.Success,
+        }),
+      );
+      expect(authEmailQueue.add).toHaveBeenCalledWith(
+        AuthEmailJobType.ResetPassword,
+        expect.objectContaining({
+          to: publicUser.email,
+          userName: publicUser.firstName,
+          token: 'raw-reset-token',
+        }),
+      );
+    });
+
+    it('happy path: logs UserNotFound and silently returns when email does not exist', async () => {
+      users.findByEmail.mockResolvedValue(null);
+      authLogs.recordForgotPasswordLog.mockResolvedValue({} as never);
+
+      await expect(
+        service.forgotPassword('ghost@test.com', session),
+      ).resolves.toBeUndefined();
+
+      expect(authLogs.recordForgotPasswordLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: 'ghost@test.com',
+          status: AuthStatus.UserNotFound,
+        }),
+      );
+      expect(resetTokens.issue).not.toHaveBeenCalled();
+      expect(authEmailQueue.add).not.toHaveBeenCalled();
+    });
+
+    it('edge case: silently swallows RateLimitedException and logs Failed (anti-enumeration)', async () => {
+      users.findByEmail.mockResolvedValue(publicUser);
+      resetTokens.issue.mockRejectedValue(
+        new RateLimitedException('Aguarde', { retryAfterSeconds: 60 }),
+      );
+      authLogs.recordForgotPasswordLog.mockResolvedValue({} as never);
+
+      await expect(
+        service.forgotPassword(publicUser.email, session),
+      ).resolves.toBeUndefined();
+
+      expect(authLogs.recordForgotPasswordLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: publicUser.email,
+          status: AuthStatus.Failed,
+        }),
+      );
+      expect(authEmailQueue.add).not.toHaveBeenCalled();
+    });
+
+    it('edge case: silently swallows generic error and logs Failed (anti-enumeration)', async () => {
+      users.findByEmail.mockRejectedValue(new Error('db down'));
+      authLogs.recordForgotPasswordLog.mockResolvedValue({} as never);
+
+      await expect(
+        service.forgotPassword(publicUser.email, session),
+      ).resolves.toBeUndefined();
+
+      expect(authLogs.recordForgotPasswordLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: publicUser.email,
+          status: AuthStatus.Failed,
+        }),
+      );
+    });
+
+    it('edge case: still completes when queue.add fails (best-effort enqueue)', async () => {
+      setupHappyPath();
+      authEmailQueue.add.mockRejectedValue(new Error('redis down'));
+
+      await expect(
+        service.forgotPassword(publicUser.email, session),
+      ).resolves.toBeUndefined();
+
+      expect(authLogs.recordForgotPasswordLog).toHaveBeenCalledWith(
+        expect.objectContaining({ status: AuthStatus.Success }),
+      );
+    });
+  });
+
+  describe('revokeSession', () => {
+    it('happy path: passes current jti so backend blocks revoking current session', async () => {
+      tokens.decodeUnsafe.mockReturnValue({
+        sub: publicUser.id,
+        jti: 'jti-current',
+      });
+      refreshTokens.revokeSessionByIdForUser.mockResolvedValue(undefined);
+
+      await service.revokeSession(
+        publicUser.id,
+        'session-uuid',
+        'raw-refresh-token',
+      );
+
+      expect(refreshTokens.revokeSessionByIdForUser).toHaveBeenCalledWith(
+        publicUser.id,
+        'session-uuid',
+        'jti-current',
+      );
+    });
+
+    it('happy path: passes undefined exceptJti when refresh token absent', async () => {
+      refreshTokens.revokeSessionByIdForUser.mockResolvedValue(undefined);
+
+      await service.revokeSession(publicUser.id, 'session-uuid', undefined);
+
+      expect(refreshTokens.revokeSessionByIdForUser).toHaveBeenCalledWith(
+        publicUser.id,
+        'session-uuid',
+        undefined,
+      );
+    });
+  });
+
+  describe('revokeAllOtherSessions', () => {
+    it('happy path: decodes current jti and revokes all except that one', async () => {
+      tokens.decodeUnsafe.mockReturnValue({
+        sub: publicUser.id,
+        jti: 'jti-current',
+      });
+      refreshTokens.revokeAllForUserExcept.mockResolvedValue(undefined);
+
+      await service.revokeAllOtherSessions(publicUser.id, 'raw-refresh-token');
+
+      expect(tokens.decodeUnsafe).toHaveBeenCalledWith('raw-refresh-token');
+      expect(refreshTokens.revokeAllForUserExcept).toHaveBeenCalledWith(
+        publicUser.id,
+        'jti-current',
+      );
+    });
+
+    it('error: throws UnauthorizedException when refresh token is missing', async () => {
+      await expect(
+        service.revokeAllOtherSessions(publicUser.id, undefined),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(refreshTokens.revokeAllForUserExcept).not.toHaveBeenCalled();
+    });
+
+    it('error: throws UnauthorizedException when refresh token cannot be decoded (jti missing)', async () => {
+      tokens.decodeUnsafe.mockReturnValue(null);
+
+      await expect(
+        service.revokeAllOtherSessions(publicUser.id, 'garbage'),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(refreshTokens.revokeAllForUserExcept).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resetPassword', () => {
+    function setupHappyPath() {
+      resetTokens.consume.mockResolvedValue({
+        userId: publicUser.id,
+        email: publicUser.email,
+      });
+      bcryptMock.hash.mockResolvedValue('new-hashed-password' as never);
+      users.changePassword.mockResolvedValue(undefined);
+      refreshTokens.revokeAllForUser.mockResolvedValue(undefined);
+      authLogs.recordPasswordResetLog.mockResolvedValue({} as never);
+    }
+
+    it('happy path: consumes token, hashes new password, changes it, revokes all refresh tokens and logs Success', async () => {
+      setupHappyPath();
+
+      await service.resetPassword(
+        'raw-reset-token',
+        'new-strong-pass',
+        session,
+      );
+
+      expect(resetTokens.consume).toHaveBeenCalledWith('raw-reset-token');
+      expect(bcryptMock.hash).toHaveBeenCalledWith('new-strong-pass', 12);
+      expect(users.changePassword).toHaveBeenCalledWith(
+        publicUser.id,
+        publicUser.email,
+        'new-hashed-password',
+        prisma,
+      );
+      expect(refreshTokens.revokeAllForUser).toHaveBeenCalledWith(
+        publicUser.id,
+        prisma,
+      );
+      expect(authLogs.recordPasswordResetLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: publicUser.id,
+          email: publicUser.email,
+          status: AuthStatus.Success,
+        }),
+        prisma,
+      );
+    });
+
+    it('error: rethrows InvalidResetPasswordTokenException and logs InvalidResetPasswordToken with context', async () => {
+      resetTokens.consume.mockRejectedValue(
+        new InvalidResetPasswordTokenException(publicUser.id, publicUser.email),
+      );
+      authLogs.recordPasswordResetLog.mockResolvedValue({} as never);
+
+      await expect(
+        service.resetPassword('expired', 'new-pass', session),
+      ).rejects.toThrow(InvalidResetPasswordTokenException);
+
+      expect(authLogs.recordPasswordResetLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: publicUser.id,
+          email: publicUser.email,
+          status: AuthStatus.InvalidResetPasswordToken,
+        }),
+      );
+      expect(users.changePassword).not.toHaveBeenCalled();
+      expect(refreshTokens.revokeAllForUser).not.toHaveBeenCalled();
+    });
+
+    it('error: rethrows InvalidResetPasswordTokenException without context when record is unknown', async () => {
+      resetTokens.consume.mockRejectedValue(
+        new InvalidResetPasswordTokenException(),
+      );
+      authLogs.recordPasswordResetLog.mockResolvedValue({} as never);
+
+      await expect(
+        service.resetPassword('garbage', 'new-pass', session),
+      ).rejects.toThrow(InvalidResetPasswordTokenException);
+
+      expect(authLogs.recordPasswordResetLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: undefined,
+          email: undefined,
+          status: AuthStatus.InvalidResetPasswordToken,
+        }),
+      );
+    });
+
+    it('error: wraps unknown error as InternalServerErrorException', async () => {
+      resetTokens.consume.mockRejectedValue(new Error('db down'));
+
+      await expect(
+        service.resetPassword('raw-reset-token', 'new-pass', session),
+      ).rejects.toThrow(InternalServerErrorException);
+
+      expect(users.changePassword).not.toHaveBeenCalled();
+      expect(refreshTokens.revokeAllForUser).not.toHaveBeenCalled();
+    });
+
+    it('edge case: still throws even if InvalidResetPasswordToken audit log itself fails', async () => {
+      resetTokens.consume.mockRejectedValue(
+        new InvalidResetPasswordTokenException(publicUser.id, publicUser.email),
+      );
+      authLogs.recordPasswordResetLog.mockRejectedValue(new Error('log down'));
+
+      await expect(
+        service.resetPassword('expired', 'new-pass', session),
+      ).rejects.toThrow(InvalidResetPasswordTokenException);
     });
   });
 });
