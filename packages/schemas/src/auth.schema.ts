@@ -55,7 +55,11 @@ export const PublicAuthSessionSchema = z.object({
     lastActivityAt: z.iso.datetime(),
     expiresAt: z.iso.datetime(),
     ipAddress: z.string().nullable(),
-    device: z.object({ browser: z.string().nullable(), os: z.string().nullable() })
+    device: z.object({
+        browser: z.string().nullable(),
+        os: z.string().nullable(),
+        type: z.enum(['mobile', 'tablet', 'desktop'])
+    })
 })
 
 export type PublicAuthSession = z.infer<typeof PublicAuthSessionSchema>

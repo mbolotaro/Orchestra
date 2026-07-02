@@ -319,7 +319,7 @@ export class AuthService {
     const rows = await this.refreshTokenService.findActiveByUser(userId);
 
     const sessions = rows.map<PublicAuthSession>((row) => {
-      const { browser, os } = parseUA(row.userAgent);
+      const { browser, os, type } = parseUA(row.userAgent);
 
       return {
         id: row.id,
@@ -328,8 +328,9 @@ export class AuthService {
         expiresAt: row.expiresAt.toISOString(),
         ipAddress: row.ipAddress,
         device: {
-          browser: browser ?? 'Unknown',
-          os: os ?? 'Unknown',
+          browser,
+          os,
+          type,
         },
       };
     });
