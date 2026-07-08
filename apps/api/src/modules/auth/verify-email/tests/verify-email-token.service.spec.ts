@@ -1,19 +1,19 @@
 import { InternalServerErrorException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { mockDeep, type DeepMockProxy } from 'jest-mock-extended';
-import { EnvService } from '../../env/env.service';
-import { PrismaService } from '../../prisma/prisma.service';
-import { EmailVerificationTokenService } from '../email-verification-token.service';
+import { EnvService } from '../../../env/env.service';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { VerifyEmailTokenService } from '../verify-email-token.service';
 import { InvalidVerifyTokenException } from '../exceptions/invalid-verify-token.exception';
-import { RateLimitedException } from '../../../common/exceptions/rate-limited.exception';
-import { VERIFY_EMAIL_COOLDOWN_MS } from '../auth.constants';
+import { RateLimitedException } from '../../../../common/exceptions/rate-limited.exception';
+import { VERIFY_EMAIL_COOLDOWN_MS } from '../../auth.constants';
 
 const USER_ID = '0193b3c0-0000-7000-8000-000000000000';
 const EMAIL = 'mario@test.com';
 const PEPPER = 'test-pepper-fixed-32-chars-1234567890abcd';
 
-describe('EmailVerificationTokenService', () => {
-  let service: EmailVerificationTokenService;
+describe('VerifyEmailTokenService', () => {
+  let service: VerifyEmailTokenService;
   let prisma: DeepMockProxy<PrismaService>;
   let env: DeepMockProxy<EnvService>;
 
@@ -33,13 +33,13 @@ describe('EmailVerificationTokenService', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        EmailVerificationTokenService,
+        VerifyEmailTokenService,
         { provide: PrismaService, useValue: prisma },
         { provide: EnvService, useValue: env },
       ],
     }).compile();
 
-    service = module.get(EmailVerificationTokenService);
+    service = module.get(VerifyEmailTokenService);
   });
 
   it('happy path: is instantiated with its dependencies', () => {

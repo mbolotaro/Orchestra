@@ -37,6 +37,10 @@ export const EnvSchema = z.object({
   JWT_ACCESS_EXPIRATION: duration('15m'),
   JWT_REFRESH_EXPIRATION: duration('7d'),
 
+  GOOGLE_CLIENT_ID: z.string(),
+  GOOGLE_CLIENT_SECRET: z.string(),
+  OAUTH_CALLBACK_BASE: z.url(),
+
   FRONTEND_URL: z.url(),
 });
 

@@ -11,11 +11,11 @@ import { AuthCookieService } from '../auth-cookie.service';
 import { ALLOW_UNVERIFIED_KEY } from '../decorators/allow-unverified.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { ScopeUpgradeNeededException } from '../exceptions/scope-upgrade-needed.exception';
-import { TokenService } from '../token.service';
+import { TokenService } from '../tokens/token.service';
 import {
   AccessTokenPayload,
   AccessTokenScope,
-} from '../types/access-token.type';
+} from '../tokens/types/access-token.type';
 
 @Injectable()
 export class AuthGuard implements CanActivate {

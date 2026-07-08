@@ -5,12 +5,12 @@ import {
 import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
 import { mockDeep, type DeepMockProxy } from 'jest-mock-extended';
-import { EnvService } from '../../env/env.service';
-import { PrismaService } from '../../prisma/prisma.service';
+import { EnvService } from '../../../env/env.service';
+import { PrismaService } from '../../../prisma/prisma.service';
 import { RefreshTokenReuseException } from '../exceptions/refresh-token-reuse.exception';
 import { RefreshTokenService } from '../refresh-token.service';
 import { TokenService } from '../token.service';
-import type { SessionInfoPayload } from '../types/session-info.type';
+import type { SessionInfoPayload } from '../../types/session-info.type';
 
 jest.mock('bcrypt');
 const bcryptMock = bcrypt as jest.Mocked<typeof bcrypt>;

@@ -3,26 +3,26 @@ import { APP_GUARD } from '@nestjs/core';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
-import { AuthLogsService } from './auth-logs.service';
-import { TokenService } from './token.service';
-import { JwtModule } from '@nestjs/jwt';
-import { EnvModule } from '../env/env.module';
-import { EnvService } from '../env/env.service';
-import { RefreshTokenService } from './refresh-token.service';
+import { AuditLogModule } from './audit-log/audit-log.module';
+import { TokensModule } from './tokens/tokens.module';
 import { AuthCookieService } from './auth-cookie.service';
 import { AuthGuard } from './guards/auth.guard';
-import { EmailVerificationTokenService } from './email-verification-token.service';
+import { VerifyEmailModule } from './verify-email/verify-email.module';
 import { EmailModule } from '../email/email.module';
 import { BullModule } from '@nestjs/bullmq';
 import { AUTH_EMAIL_QUEUE } from './auth.constants';
 import { AuthProcessor } from './auth-email.processor';
-import { PasswordResetTokenService } from './password-reset-token.service';
+import { PasswordResetModule } from './password-reset/password-reset.module';
 import { AuthSessionsController } from './auth-sessions.controller';
 
 @Module({
   imports: [
     UsersModule,
     EmailModule,
+    TokensModule,
+    AuditLogModule,
+    VerifyEmailModule,
+    PasswordResetModule,
     BullModule.registerQueue({
       name: AUTH_EMAIL_QUEUE,
       defaultJobOptions: {
@@ -35,29 +35,16 @@ import { AuthSessionsController } from './auth-sessions.controller';
         removeOnFail: { age: 7 * 24 * 3600 }, // 7 days
       },
     }),
-    JwtModule.registerAsync({
-      imports: [EnvModule],
-      inject: [EnvService],
-      useFactory: (env: EnvService) => ({
-        secret: env.get('JWT_SECRET'),
-        signOptions: { expiresIn: env.get('JWT_ACCESS_EXPIRATION') },
-      }),
-    }),
   ],
   controllers: [AuthController, AuthSessionsController],
   providers: [
     AuthService,
-    AuthLogsService,
-    TokenService,
-    RefreshTokenService,
     AuthCookieService,
     {
       provide: APP_GUARD,
       useClass: AuthGuard,
     },
-    EmailVerificationTokenService,
     AuthProcessor,
-    PasswordResetTokenService,
   ],
 })
 export class AuthModule {}

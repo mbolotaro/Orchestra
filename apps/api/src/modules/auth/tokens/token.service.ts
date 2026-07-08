@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { EnvService } from '../env/env.service';
+import { EnvService } from '../../env/env.service';
 import {
   AccessTokenPayload,
   AccessTokenScope,

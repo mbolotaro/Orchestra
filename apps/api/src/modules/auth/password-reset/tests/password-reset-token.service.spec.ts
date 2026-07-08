@@ -1,12 +1,12 @@
 import { InternalServerErrorException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { mockDeep, type DeepMockProxy } from 'jest-mock-extended';
-import { EnvService } from '../../env/env.service';
-import { PrismaService } from '../../prisma/prisma.service';
+import { EnvService } from '../../../env/env.service';
+import { PrismaService } from '../../../prisma/prisma.service';
 import { PasswordResetTokenService } from '../password-reset-token.service';
 import { InvalidResetPasswordTokenException } from '../exceptions/invalid-reset-password-token.exception';
-import { RateLimitedException } from '../../../common/exceptions/rate-limited.exception';
-import { RESET_PASSWORD_COOLDOWN_MS } from '../auth.constants';
+import { RateLimitedException } from '../../../../common/exceptions/rate-limited.exception';
+import { RESET_PASSWORD_COOLDOWN_MS } from '../../auth.constants';
 
 const USER_ID = '0193b3c0-0000-7000-8000-000000000000';
 const EMAIL = 'mario@test.com';
@@ -197,6 +197,6 @@ describe('PasswordResetTokenService', () => {
       );
     });
   });
-});
 
-void RESET_PASSWORD_COOLDOWN_MS;
+  void RESET_PASSWORD_COOLDOWN_MS;
+});

@@ -4,23 +4,23 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { EnvService } from '../env/env.service';
-import { Prisma } from '../../generated/prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { EnvService } from '../../env/env.service';
+import { Prisma } from '../../../generated/prisma/client';
 import { createHash, randomBytes } from 'crypto';
-import { durationToMs } from '../../common/helpers/parse-duration.helper';
-import { msToHuman } from '../../common/helpers/ms-to-human.helper';
+import { durationToMs } from '../../../common/helpers/parse-duration.helper';
+import { msToHuman } from '../../../common/helpers/ms-to-human.helper';
 import { InvalidVerifyTokenException } from './exceptions/invalid-verify-token.exception';
 import {
   IssueVerifyEmailResponse,
   VerifyEmailTokenPayload,
 } from './types/verify-token.type';
-import { RateLimitedException } from '../../common/exceptions/rate-limited.exception';
-import { VERIFY_EMAIL_COOLDOWN_MS } from './auth.constants';
+import { RateLimitedException } from '../../../common/exceptions/rate-limited.exception';
+import { VERIFY_EMAIL_COOLDOWN_MS } from '../auth.constants';
 
 @Injectable()
-export class EmailVerificationTokenService {
-  private readonly logger = new Logger(EmailVerificationTokenService.name);
+export class VerifyEmailTokenService {
+  private readonly logger = new Logger(VerifyEmailTokenService.name);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -113,7 +113,7 @@ export class EmailVerificationTokenService {
     }
   }
 
-  private hash(rawToken: string): string {
+  hash(rawToken: string): string {
     const pepper = this.env.get('EMAIL_VERIFICATION_PEPPER');
     return createHash('sha256')
       .update(rawToken + pepper)

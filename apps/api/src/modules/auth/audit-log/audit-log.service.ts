@@ -3,14 +3,14 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { RecordAuthLog } from './types/record-auth-log.type';
-import { AuthAction, AuthLog } from '../../generated/prisma/client';
-import { TransactionClient } from '../../generated/prisma/internal/prismaNamespace';
+import { AuthAction, AuthLog } from '../../../generated/prisma/client';
+import { TransactionClient } from '../../../generated/prisma/internal/prismaNamespace';
 
 @Injectable()
-export class AuthLogsService {
-  private readonly logger = new Logger(AuthLogsService.name);
+export class AuditLogService {
+  private readonly logger = new Logger(AuditLogService.name);
 
   constructor(private readonly prismaService: PrismaService) {}
 
@@ -110,7 +110,7 @@ export class AuthLogsService {
         },
       });
     } catch (error) {
-      this.logger.error({ error }, 'recordRefreshLog');
+      this.logger.error({ error }, 'recordSignOutLog');
 
       throw new InternalServerErrorException(
         'Não foi possível registrar atualização de sessão.',

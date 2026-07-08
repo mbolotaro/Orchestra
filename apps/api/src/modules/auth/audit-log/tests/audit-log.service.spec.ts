@@ -1,13 +1,13 @@
 import { InternalServerErrorException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { mockDeep, type DeepMockProxy } from 'jest-mock-extended';
-import { AuthAction, AuthStatus } from '../../../generated/prisma/enums';
-import { PrismaService } from '../../prisma/prisma.service';
-import { AuthLogsService } from '../auth-logs.service';
+import { AuthAction, AuthStatus } from '../../../../generated/prisma/enums';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { AuditLogService } from '../audit-log.service';
 import type { RecordAuthLog } from '../types/record-auth-log.type';
 
-describe('AuthLogsService', () => {
-  let service: AuthLogsService;
+describe('AuditLogService', () => {
+  let service: AuditLogService;
   let prisma: DeepMockProxy<PrismaService>;
 
   const baseRecord: RecordAuthLog = {
@@ -24,12 +24,12 @@ describe('AuthLogsService', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        AuthLogsService,
+        AuditLogService,
         { provide: PrismaService, useValue: prisma },
       ],
     }).compile();
 
-    service = module.get(AuthLogsService);
+    service = module.get(AuditLogService);
   });
 
   it('happy path: is instantiated with its dependencies', () => {

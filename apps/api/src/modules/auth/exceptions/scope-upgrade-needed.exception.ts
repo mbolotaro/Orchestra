@@ -1,7 +1,7 @@
 import { HttpStatus } from '@nestjs/common';
 import { ErrorCode } from '@orchestra/schemas';
 import { AppException } from '../../../common/exceptions/app.exception';
-import { AccessTokenScope } from '../types/access-token.type';
+import { AccessTokenScope } from '../tokens/types/access-token.type';
 
 export class ScopeUpgradeNeededException extends AppException {
   constructor(scopes: {

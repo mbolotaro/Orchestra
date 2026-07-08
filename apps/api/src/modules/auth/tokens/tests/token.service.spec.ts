@@ -2,9 +2,10 @@ import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { mockDeep, type DeepMockProxy } from 'jest-mock-extended';
-import { EnvService } from '../../env/env.service';
+import { EnvService } from '../../../env/env.service';
 import {
   AccessTokenPayload,
+  AccessTokenScope,
   RefreshTokenPayload,
 } from '../types/access-token.type';
 import { TokenService } from '../token.service';
@@ -38,12 +39,12 @@ describe('TokenService', () => {
       env.get.mockReturnValue('15m');
       jwt.signAsync.mockResolvedValue('signed.access.token');
 
-      const token = await service.signAccess('user-123');
+      const token = await service.signAccess('user-123', AccessTokenScope.Full);
 
       expect(token).toBe('signed.access.token');
       expect(env.get).toHaveBeenCalledWith('JWT_ACCESS_EXPIRATION');
       expect(jwt.signAsync).toHaveBeenCalledWith(
-        { sub: 'user-123', type: 'access' },
+        { sub: 'user-123', scope: AccessTokenScope.Full, type: 'access' },
         { expiresIn: '15m' },
       );
     });
@@ -71,7 +72,11 @@ describe('TokenService', () => {
 
   describe('verifyAccess', () => {
     it('happy path: returns payload when token is a valid access token', async () => {
-      const payload: AccessTokenPayload = { sub: 'user-123', type: 'access' };
+      const payload: AccessTokenPayload = {
+        sub: 'user-123',
+        scope: AccessTokenScope.Full,
+        type: 'access',
+      };
       jwt.verifyAsync.mockResolvedValue(payload);
 
       await expect(service.verifyAccess('token')).resolves.toEqual(payload);

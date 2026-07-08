@@ -12,10 +12,10 @@ import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionInfoPayload } from './types/session-info.type';
-import { AuthLogsService } from './auth-logs.service';
+import { AuditLogService } from './audit-log/audit-log.service';
 import { AuthStatus } from '../../generated/prisma/enums';
-import { RefreshTokenService } from './refresh-token.service';
-import { TokenService } from './token.service';
+import { RefreshTokenService } from './tokens/refresh-token.service';
+import { TokenService } from './tokens/token.service';
 import { AuthSession } from './types/auth-session.type';
 import { SignInDto } from './dto/signin.dto';
 import {
@@ -26,10 +26,10 @@ import {
   PublicUserSchema,
 } from '@orchestra/schemas';
 import { parseUA } from '../../common/helpers/parse-ua.helper';
-import { RefreshTokenReuseException } from './exceptions/refresh-token-reuse.exception';
-import { AccessTokenScope } from './types/access-token.type';
-import { EmailVerificationTokenService } from './email-verification-token.service';
-import { InvalidVerifyTokenException } from './exceptions/invalid-verify-token.exception';
+import { RefreshTokenReuseException } from './tokens/exceptions/refresh-token-reuse.exception';
+import { AccessTokenScope } from './tokens/types/access-token.type';
+import { VerifyEmailTokenService } from './verify-email/verify-email-token.service';
+import { InvalidVerifyTokenException } from './verify-email/exceptions/invalid-verify-token.exception';
 import { Queue } from 'bullmq';
 import { InjectQueue } from '@nestjs/bullmq';
 import { AUTH_EMAIL_QUEUE } from './auth.constants';
@@ -38,9 +38,9 @@ import {
   ResetPasswordJobPayload,
   VerifyEmailJobPayload,
 } from './types/auth-job.type';
-import { PasswordResetTokenService } from './password-reset-token.service';
+import { PasswordResetTokenService } from './password-reset/password-reset-token.service';
 import { RateLimitedException } from '../../common/exceptions/rate-limited.exception';
-import { InvalidResetPasswordTokenException } from './exceptions/invalid-reset-password-token.exception';
+import { InvalidResetPasswordTokenException } from './password-reset/exceptions/invalid-reset-password-token.exception';
 
 @Injectable()
 export class AuthService {
@@ -51,10 +51,10 @@ export class AuthService {
     private readonly authEmailQueue: Queue,
     private readonly prismaService: PrismaService,
     private readonly usersService: UsersService,
-    private readonly authLogService: AuthLogsService,
+    private readonly auditLogService: AuditLogService,
     private readonly tokenService: TokenService,
     private readonly refreshTokenService: RefreshTokenService,
-    private readonly emailVerificationTokenService: EmailVerificationTokenService,
+    private readonly verifyEmailTokenService: VerifyEmailTokenService,
     private readonly passwordResetTokenService: PasswordResetTokenService,
   ) {}
 
@@ -80,7 +80,7 @@ export class AuthService {
             tx,
           );
 
-          await this.authLogService.recordSignUpLog(
+          await this.auditLogService.recordSignUpLog(
             {
               email: user.email,
               userId: user.id,
@@ -93,11 +93,7 @@ export class AuthService {
           );
 
           const { rawToken: verifyTokenRaw } =
-            await this.emailVerificationTokenService.issue(
-              user.id,
-              user.email,
-              tx,
-            );
+            await this.verifyEmailTokenService.issue(user.id, user.email, tx);
 
           const { token: refreshToken } = await this.refreshTokenService.issue(
             user.id,
@@ -127,7 +123,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error({ error, email: signUpDto.email }, 'signUp');
 
-      await this.authLogService
+      await this.auditLogService
         .recordSignUpLog({
           email: signUpDto.email,
           status: AuthStatus.Failed,
@@ -168,7 +164,7 @@ export class AuthService {
           ? AuthStatus.NoPasswordHash
           : AuthStatus.WrongPassword;
 
-      await this.authLogService
+      await this.auditLogService
         .recordSignInLog({
           email: signInDto.email,
           userId: user?.id,
@@ -199,7 +195,7 @@ export class AuthService {
         accessTokenScope,
       );
 
-      await this.authLogService
+      await this.auditLogService
         .recordSignInLog({
           email: user.email,
           userId: user.id,
@@ -220,7 +216,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error({ error, email: signInDto.email }, 'signIn');
 
-      await this.authLogService
+      await this.auditLogService
         .recordSignInLog({
           email: signInDto.email,
           status: AuthStatus.Failed,
@@ -256,7 +252,7 @@ export class AuthService {
         });
     }
 
-    await this.authLogService
+    await this.auditLogService
       .recordSignOutLog({
         userId: decoded?.sub,
         ipAddress: session.ip,
@@ -359,7 +355,7 @@ export class AuthService {
         accessTokenScope,
       );
 
-      await this.authLogService
+      await this.auditLogService
         .recordRefreshLog({
           email: user.email,
           userId,
@@ -387,7 +383,7 @@ export class AuthService {
 
       const userId = this.tokenService.decodeUnsafe(token)?.sub;
 
-      await this.authLogService
+      await this.auditLogService
         .recordRefreshLog({
           userId,
           status,
@@ -411,10 +407,10 @@ export class AuthService {
 
     try {
       const { email, userId } =
-        await this.emailVerificationTokenService.consume(rawToken);
+        await this.verifyEmailTokenService.consume(rawToken);
 
       await this.usersService.markEmailAsVerified(userId, email);
-      await this.authLogService.recordVerifyEmailLog({
+      await this.auditLogService.recordVerifyEmailLog({
         status: AuthStatus.Success,
         email,
         userId,
@@ -426,7 +422,7 @@ export class AuthService {
       this.logger.error({ error }, 'verifyEmail');
 
       if (error instanceof InvalidVerifyTokenException) {
-        await this.authLogService
+        await this.auditLogService
           .recordVerifyEmailLog({
             status: AuthStatus.InvalidVerifyToken,
             ipAddress: session.ip,
@@ -460,14 +456,14 @@ export class AuthService {
       if (user.isEmailVerified)
         throw new ConflictException('A sua conta já está verificada.');
 
-      const { rawToken } = await this.emailVerificationTokenService.issue(
+      const { rawToken } = await this.verifyEmailTokenService.issue(
         user.id,
         user.email,
       );
 
       await this.enqueueVerifyEmail(user, rawToken);
 
-      await this.authLogService
+      await this.auditLogService
         .recordResendVerifyEmailLog({
           userId: user.id,
           email: user.email,
@@ -482,7 +478,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error({ error }, 'resendVerify');
 
-      await this.authLogService
+      await this.auditLogService
         .recordResendVerifyEmailLog({
           userId,
           status: AuthStatus.Failed,
@@ -512,7 +508,7 @@ export class AuthService {
       const user = await this.usersService.findByEmail(email);
 
       if (!user) {
-        await this.authLogService
+        await this.auditLogService
           .recordForgotPasswordLog({
             email,
             status: AuthStatus.UserNotFound,
@@ -531,7 +527,7 @@ export class AuthService {
         user.email,
       );
 
-      await this.authLogService
+      await this.auditLogService
         .recordForgotPasswordLog({
           userId: user.id,
           email: user.email,
@@ -562,7 +558,7 @@ export class AuthService {
           'forgotPassword: cooldown hit, silenced for anti-enumeration',
         );
 
-        await this.authLogService
+        await this.auditLogService
           .recordForgotPasswordLog({
             email,
             status: AuthStatus.Failed,
@@ -581,7 +577,7 @@ export class AuthService {
         'forgotPassword: silent error (anti-enumeration)',
       );
 
-      await this.authLogService
+      await this.auditLogService
         .recordForgotPasswordLog({
           email,
           status: AuthStatus.Failed,
@@ -616,7 +612,7 @@ export class AuthService {
           tx,
         );
         await this.refreshTokenService.revokeAllForUser(userId, tx);
-        await this.authLogService.recordPasswordResetLog(
+        await this.auditLogService.recordPasswordResetLog(
           {
             email,
             userId,
@@ -632,7 +628,7 @@ export class AuthService {
       this.logger.error({ error }, 'resetPassword');
 
       if (error instanceof InvalidResetPasswordTokenException) {
-        await this.authLogService
+        await this.auditLogService
           .recordPasswordResetLog({
             status: AuthStatus.InvalidResetPasswordToken,
             email: error.email,

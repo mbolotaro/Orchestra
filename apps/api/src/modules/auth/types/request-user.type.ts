@@ -1,5 +1,5 @@
 import 'express';
-import type { AccessTokenScope } from './access-token.type';
+import type { AccessTokenScope } from '../tokens/types/access-token.type';
 
 export interface RequestUser {
   sub: string;

@@ -4,18 +4,18 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { EnvService } from '../env/env.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { EnvService } from '../../env/env.service';
 import {
   IssuePasswordResetResponse,
   ResetPasswordTokenPayload,
 } from './types/password-reset-token.type';
-import { Prisma } from '../../generated/prisma/client';
+import { Prisma } from '../../../generated/prisma/client';
 import { createHash, randomBytes } from 'crypto';
-import { durationToMs } from '../../common/helpers/parse-duration.helper';
-import { RESET_PASSWORD_COOLDOWN_MS } from './auth.constants';
-import { RateLimitedException } from '../../common/exceptions/rate-limited.exception';
-import { msToHuman } from '../../common/helpers/ms-to-human.helper';
+import { durationToMs } from '../../../common/helpers/parse-duration.helper';
+import { RESET_PASSWORD_COOLDOWN_MS } from '../auth.constants';
+import { RateLimitedException } from '../../../common/exceptions/rate-limited.exception';
+import { msToHuman } from '../../../common/helpers/ms-to-human.helper';
 import { InvalidResetPasswordTokenException } from './exceptions/invalid-reset-password-token.exception';
 
 @Injectable()

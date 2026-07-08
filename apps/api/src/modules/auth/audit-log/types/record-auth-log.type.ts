@@ -1,4 +1,4 @@
-import { AuthStatus, OAuthAccountType } from '../../../generated/prisma/enums';
+import { AuthStatus, OAuthAccountType } from '../../../../generated/prisma/enums';
 
 export interface RecordAuthLog {
   email?: string;

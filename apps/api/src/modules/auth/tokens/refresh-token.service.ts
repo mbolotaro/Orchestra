@@ -6,17 +6,17 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { TokenService } from './token.service';
-import { EnvService } from '../env/env.service';
-import { SessionInfoPayload } from './types/session-info.type';
+import { EnvService } from '../../env/env.service';
+import { SessionInfoPayload } from '../types/session-info.type';
 import { IssuedRefresh } from './types/issued-refresh.type';
 import { randomUUID } from 'crypto';
 import * as bcrypt from 'bcrypt';
-import { Prisma } from '../../generated/prisma/client';
-import { durationToMs } from '../../common/helpers/parse-duration.helper';
+import { Prisma } from '../../../generated/prisma/client';
+import { durationToMs } from '../../../common/helpers/parse-duration.helper';
 import { RefreshTokenReuseException } from './exceptions/refresh-token-reuse.exception';
-import { TransactionClient } from '../../generated/prisma/internal/prismaNamespace';
+import { TransactionClient } from '../../../generated/prisma/internal/prismaNamespace';
 import { RefreshTokenSummary } from './types/refresh-token-summary.type';
 
 @Injectable()

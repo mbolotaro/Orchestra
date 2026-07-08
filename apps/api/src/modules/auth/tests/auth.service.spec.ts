@@ -12,17 +12,17 @@ import { mockDeep, type DeepMockProxy } from 'jest-mock-extended';
 import { AuthStatus } from '../../../generated/prisma/enums';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../../users/users.service';
-import { AuthLogsService } from '../auth-logs.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuthService } from '../auth.service';
-import { RefreshTokenReuseException } from '../exceptions/refresh-token-reuse.exception';
-import { RefreshTokenService } from '../refresh-token.service';
-import { TokenService } from '../token.service';
-import { AccessTokenScope } from '../types/access-token.type';
+import { RefreshTokenReuseException } from '../tokens/exceptions/refresh-token-reuse.exception';
+import { RefreshTokenService } from '../tokens/refresh-token.service';
+import { TokenService } from '../tokens/token.service';
+import { AccessTokenScope } from '../tokens/types/access-token.type';
 import type { SessionInfoPayload } from '../types/session-info.type';
-import { EmailVerificationTokenService } from '../email-verification-token.service';
-import { InvalidVerifyTokenException } from '../exceptions/invalid-verify-token.exception';
-import { PasswordResetTokenService } from '../password-reset-token.service';
-import { InvalidResetPasswordTokenException } from '../exceptions/invalid-reset-password-token.exception';
+import { VerifyEmailTokenService } from '../verify-email/verify-email-token.service';
+import { InvalidVerifyTokenException } from '../verify-email/exceptions/invalid-verify-token.exception';
+import { PasswordResetTokenService } from '../password-reset/password-reset-token.service';
+import { InvalidResetPasswordTokenException } from '../password-reset/exceptions/invalid-reset-password-token.exception';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { AUTH_EMAIL_QUEUE } from '../auth.constants';
@@ -48,20 +48,20 @@ describe('AuthService', () => {
   let service: AuthService;
   let prisma: DeepMockProxy<PrismaService>;
   let users: DeepMockProxy<UsersService>;
-  let authLogs: DeepMockProxy<AuthLogsService>;
+  let auditLogs: DeepMockProxy<AuditLogService>;
   let tokens: DeepMockProxy<TokenService>;
   let refreshTokens: DeepMockProxy<RefreshTokenService>;
-  let verifyTokens: DeepMockProxy<EmailVerificationTokenService>;
+  let verifyTokens: DeepMockProxy<VerifyEmailTokenService>;
   let resetTokens: DeepMockProxy<PasswordResetTokenService>;
   let authEmailQueue: DeepMockProxy<Queue>;
 
   beforeEach(async () => {
     prisma = mockDeep<PrismaService>();
     users = mockDeep<UsersService>();
-    authLogs = mockDeep<AuthLogsService>();
+    auditLogs = mockDeep<AuditLogService>();
     tokens = mockDeep<TokenService>();
     refreshTokens = mockDeep<RefreshTokenService>();
-    verifyTokens = mockDeep<EmailVerificationTokenService>();
+    verifyTokens = mockDeep<VerifyEmailTokenService>();
     resetTokens = mockDeep<PasswordResetTokenService>();
     authEmailQueue = mockDeep<Queue>();
 
@@ -77,10 +77,10 @@ describe('AuthService', () => {
         AuthService,
         { provide: PrismaService, useValue: prisma },
         { provide: UsersService, useValue: users },
-        { provide: AuthLogsService, useValue: authLogs },
+        { provide: AuditLogService, useValue: auditLogs },
         { provide: TokenService, useValue: tokens },
         { provide: RefreshTokenService, useValue: refreshTokens },
-        { provide: EmailVerificationTokenService, useValue: verifyTokens },
+        { provide: VerifyEmailTokenService, useValue: verifyTokens },
         { provide: PasswordResetTokenService, useValue: resetTokens },
         { provide: getQueueToken(AUTH_EMAIL_QUEUE), useValue: authEmailQueue },
       ],
@@ -104,7 +104,7 @@ describe('AuthService', () => {
     function setupHappyPath() {
       bcryptMock.hash.mockResolvedValue('hashed-password' as never);
       users.create.mockResolvedValue(publicUser);
-      authLogs.recordSignUpLog.mockResolvedValue({} as never);
+      auditLogs.recordSignUpLog.mockResolvedValue({} as never);
       verifyTokens.issue.mockResolvedValue({ rawToken: 'raw-verify-token' });
       refreshTokens.issue.mockResolvedValue({
         token: 'refresh.token',
@@ -134,7 +134,7 @@ describe('AuthService', () => {
         }),
         prisma,
       );
-      expect(authLogs.recordSignUpLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordSignUpLog).toHaveBeenCalledWith(
         expect.objectContaining({
           email: 'mario@test.com',
           userId: publicUser.id,
@@ -177,7 +177,7 @@ describe('AuthService', () => {
         accessToken: 'access.token',
         refreshToken: 'refresh.token',
       });
-      expect(authLogs.recordSignUpLog).not.toHaveBeenCalledWith(
+      expect(auditLogs.recordSignUpLog).not.toHaveBeenCalledWith(
         expect.objectContaining({ status: AuthStatus.Failed }),
       );
     });
@@ -185,7 +185,7 @@ describe('AuthService', () => {
     it('error: rethrows EmailAlreadyExistsException from usersService.create', async () => {
       bcryptMock.hash.mockResolvedValue('hashed-password' as never);
       users.create.mockRejectedValue(new EmailAlreadyExistsException());
-      authLogs.recordSignUpLog.mockResolvedValue({} as never);
+      auditLogs.recordSignUpLog.mockResolvedValue({} as never);
 
       await expect(service.signUp(signUpDto, session)).rejects.toThrow(
         EmailAlreadyExistsException,
@@ -195,12 +195,12 @@ describe('AuthService', () => {
     it('error: logs Failed audit and throws InternalServerErrorException on unexpected error', async () => {
       bcryptMock.hash.mockResolvedValue('hashed-password' as never);
       users.create.mockRejectedValue(new Error('db down'));
-      authLogs.recordSignUpLog.mockResolvedValue({} as never);
+      auditLogs.recordSignUpLog.mockResolvedValue({} as never);
 
       await expect(service.signUp(signUpDto, session)).rejects.toThrow(
         InternalServerErrorException,
       );
-      expect(authLogs.recordSignUpLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordSignUpLog).toHaveBeenCalledWith(
         expect.objectContaining({
           email: signUpDto.email,
           status: AuthStatus.Failed,
@@ -211,7 +211,7 @@ describe('AuthService', () => {
     it('edge case: still throws even if failure audit log itself fails', async () => {
       bcryptMock.hash.mockResolvedValue('hashed-password' as never);
       users.create.mockRejectedValue(new Error('db down'));
-      authLogs.recordSignUpLog.mockRejectedValue(new Error('log down'));
+      auditLogs.recordSignUpLog.mockRejectedValue(new Error('log down'));
 
       await expect(service.signUp(signUpDto, session)).rejects.toThrow(
         InternalServerErrorException,
@@ -238,7 +238,7 @@ describe('AuthService', () => {
         jti: 'jti-abc',
       });
       tokens.signAccess.mockResolvedValue('access.token');
-      authLogs.recordSignInLog.mockResolvedValue({} as never);
+      auditLogs.recordSignInLog.mockResolvedValue({} as never);
 
       const result = await service.signIn(signInDto, session);
 
@@ -249,7 +249,7 @@ describe('AuthService', () => {
         'plain-password-1234',
         rawUser.passwordHash,
       );
-      expect(authLogs.recordSignInLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordSignInLog).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: publicUser.id,
           status: AuthStatus.Success,
@@ -260,12 +260,12 @@ describe('AuthService', () => {
     it('error: throws InvalidCredentialsException and logs UserNotFound when email does not exist', async () => {
       users.findRawByEmail.mockResolvedValue(null);
       bcryptMock.compare.mockResolvedValue(false as never);
-      authLogs.recordSignInLog.mockResolvedValue({} as never);
+      auditLogs.recordSignInLog.mockResolvedValue({} as never);
 
       await expect(service.signIn(signInDto, session)).rejects.toThrow(
         InvalidCredentialsException,
       );
-      expect(authLogs.recordSignInLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordSignInLog).toHaveBeenCalledWith(
         expect.objectContaining({
           email: signInDto.email,
           status: AuthStatus.UserNotFound,
@@ -279,12 +279,12 @@ describe('AuthService', () => {
         passwordHash: null,
       } as never);
       bcryptMock.compare.mockResolvedValue(false as never);
-      authLogs.recordSignInLog.mockResolvedValue({} as never);
+      auditLogs.recordSignInLog.mockResolvedValue({} as never);
 
       await expect(service.signIn(signInDto, session)).rejects.toThrow(
         InvalidCredentialsException,
       );
-      expect(authLogs.recordSignInLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordSignInLog).toHaveBeenCalledWith(
         expect.objectContaining({ status: AuthStatus.NoPasswordHash }),
       );
     });
@@ -292,12 +292,12 @@ describe('AuthService', () => {
     it('error: throws InvalidCredentialsException and logs WrongPassword when password does not match', async () => {
       users.findRawByEmail.mockResolvedValue(rawUser as never);
       bcryptMock.compare.mockResolvedValue(false as never);
-      authLogs.recordSignInLog.mockResolvedValue({} as never);
+      auditLogs.recordSignInLog.mockResolvedValue({} as never);
 
       await expect(service.signIn(signInDto, session)).rejects.toThrow(
         InvalidCredentialsException,
       );
-      expect(authLogs.recordSignInLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordSignInLog).toHaveBeenCalledWith(
         expect.objectContaining({ status: AuthStatus.WrongPassword }),
       );
     });
@@ -305,7 +305,7 @@ describe('AuthService', () => {
     it('edge case: always calls bcrypt.compare to keep timing constant (UserNotFound case)', async () => {
       users.findRawByEmail.mockResolvedValue(null);
       bcryptMock.compare.mockResolvedValue(false as never);
-      authLogs.recordSignInLog.mockResolvedValue({} as never);
+      auditLogs.recordSignInLog.mockResolvedValue({} as never);
 
       await expect(service.signIn(signInDto, session)).rejects.toThrow(
         InvalidCredentialsException,
@@ -334,7 +334,7 @@ describe('AuthService', () => {
       });
       users.getById.mockResolvedValue(publicUser);
       tokens.signAccess.mockResolvedValue('new.access.token');
-      authLogs.recordRefreshLog.mockResolvedValue({} as never);
+      auditLogs.recordRefreshLog.mockResolvedValue({} as never);
 
       const result = await service.refresh('raw-refresh', session);
 
@@ -343,7 +343,7 @@ describe('AuthService', () => {
         accessToken: 'new.access.token',
         refreshToken: 'new.refresh.token',
       });
-      expect(authLogs.recordRefreshLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordRefreshLog).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: publicUser.id,
           status: AuthStatus.Success,
@@ -354,12 +354,12 @@ describe('AuthService', () => {
     it('error: rethrows RefreshTokenReuseException and logs status Reuse', async () => {
       refreshTokens.rotate.mockRejectedValue(new RefreshTokenReuseException());
       tokens.decodeUnsafe.mockReturnValue({ sub: publicUser.id });
-      authLogs.recordRefreshLog.mockResolvedValue({} as never);
+      auditLogs.recordRefreshLog.mockResolvedValue({} as never);
 
       await expect(service.refresh('raw-refresh', session)).rejects.toThrow(
         RefreshTokenReuseException,
       );
-      expect(authLogs.recordRefreshLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordRefreshLog).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: publicUser.id,
           status: AuthStatus.Reuse,
@@ -372,12 +372,12 @@ describe('AuthService', () => {
         new UnauthorizedException('invalid'),
       );
       tokens.decodeUnsafe.mockReturnValue({ sub: publicUser.id });
-      authLogs.recordRefreshLog.mockResolvedValue({} as never);
+      auditLogs.recordRefreshLog.mockResolvedValue({} as never);
 
       await expect(service.refresh('raw-refresh', session)).rejects.toThrow(
         UnauthorizedException,
       );
-      expect(authLogs.recordRefreshLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordRefreshLog).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: publicUser.id,
           status: AuthStatus.Failed,
@@ -390,12 +390,12 @@ describe('AuthService', () => {
         new UnauthorizedException('invalid'),
       );
       tokens.decodeUnsafe.mockReturnValue(null);
-      authLogs.recordRefreshLog.mockResolvedValue({} as never);
+      auditLogs.recordRefreshLog.mockResolvedValue({} as never);
 
       await expect(service.refresh('garbage', session)).rejects.toThrow(
         UnauthorizedException,
       );
-      expect(authLogs.recordRefreshLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordRefreshLog).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: undefined,
           status: AuthStatus.Failed,
@@ -411,7 +411,7 @@ describe('AuthService', () => {
         email: publicUser.email,
       });
       users.markEmailAsVerified.mockResolvedValue(undefined);
-      authLogs.recordVerifyEmailLog.mockResolvedValue({} as never);
+      auditLogs.recordVerifyEmailLog.mockResolvedValue({} as never);
 
       await service.verifyEmail('raw-token', session);
 
@@ -420,7 +420,7 @@ describe('AuthService', () => {
         publicUser.id,
         publicUser.email,
       );
-      expect(authLogs.recordVerifyEmailLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordVerifyEmailLog).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: publicUser.id,
           email: publicUser.email,
@@ -433,12 +433,12 @@ describe('AuthService', () => {
       verifyTokens.consume.mockRejectedValue(
         new InvalidVerifyTokenException(publicUser.id, publicUser.email),
       );
-      authLogs.recordVerifyEmailLog.mockResolvedValue({} as never);
+      auditLogs.recordVerifyEmailLog.mockResolvedValue({} as never);
 
       await expect(
         service.verifyEmail('expired-token', session),
       ).rejects.toThrow(InvalidVerifyTokenException);
-      expect(authLogs.recordVerifyEmailLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordVerifyEmailLog).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: publicUser.id,
           email: publicUser.email,
@@ -450,12 +450,12 @@ describe('AuthService', () => {
 
     it('error: rethrows InvalidVerifyTokenException without context when record is unknown', async () => {
       verifyTokens.consume.mockRejectedValue(new InvalidVerifyTokenException());
-      authLogs.recordVerifyEmailLog.mockResolvedValue({} as never);
+      auditLogs.recordVerifyEmailLog.mockResolvedValue({} as never);
 
       await expect(
         service.verifyEmail('garbage-token', session),
       ).rejects.toThrow(InvalidVerifyTokenException);
-      expect(authLogs.recordVerifyEmailLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordVerifyEmailLog).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: undefined,
           email: undefined,
@@ -475,7 +475,7 @@ describe('AuthService', () => {
 
     it('edge case: still throws even if InvalidVerifyToken audit log itself fails', async () => {
       verifyTokens.consume.mockRejectedValue(new InvalidVerifyTokenException());
-      authLogs.recordVerifyEmailLog.mockRejectedValue(new Error('log down'));
+      auditLogs.recordVerifyEmailLog.mockRejectedValue(new Error('log down'));
 
       await expect(
         service.verifyEmail('expired-token', session),
@@ -488,7 +488,7 @@ describe('AuthService', () => {
       users.getById.mockResolvedValue(publicUser);
       verifyTokens.issue.mockResolvedValue({ rawToken: 'raw-verify-token' });
       authEmailQueue.add.mockResolvedValue({} as never);
-      authLogs.recordResendVerifyEmailLog.mockResolvedValue({} as never);
+      auditLogs.recordResendVerifyEmailLog.mockResolvedValue({} as never);
 
       await service.resendVerifyEmail(publicUser.id, session);
 
@@ -504,7 +504,7 @@ describe('AuthService', () => {
           token: 'raw-verify-token',
         }),
       );
-      expect(authLogs.recordResendVerifyEmailLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordResendVerifyEmailLog).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: publicUser.id,
           email: publicUser.email,
@@ -515,14 +515,14 @@ describe('AuthService', () => {
 
     it('error: throws ConflictException when user is already verified', async () => {
       users.getById.mockResolvedValue({ ...publicUser, isEmailVerified: true });
-      authLogs.recordResendVerifyEmailLog.mockResolvedValue({} as never);
+      auditLogs.recordResendVerifyEmailLog.mockResolvedValue({} as never);
 
       await expect(
         service.resendVerifyEmail(publicUser.id, session),
       ).rejects.toThrow(ConflictException);
       expect(verifyTokens.issue).not.toHaveBeenCalled();
       expect(authEmailQueue.add).not.toHaveBeenCalled();
-      expect(authLogs.recordResendVerifyEmailLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordResendVerifyEmailLog).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: publicUser.id,
           status: AuthStatus.Failed,
@@ -537,7 +537,7 @@ describe('AuthService', () => {
           retryAfterSeconds: 30,
         }),
       );
-      authLogs.recordResendVerifyEmailLog.mockResolvedValue({} as never);
+      auditLogs.recordResendVerifyEmailLog.mockResolvedValue({} as never);
 
       await expect(
         service.resendVerifyEmail(publicUser.id, session),
@@ -548,7 +548,7 @@ describe('AuthService', () => {
     it('error: wraps unknown error as InternalServerErrorException', async () => {
       users.getById.mockResolvedValue(publicUser);
       verifyTokens.issue.mockRejectedValue(new Error('db down'));
-      authLogs.recordResendVerifyEmailLog.mockResolvedValue({} as never);
+      auditLogs.recordResendVerifyEmailLog.mockResolvedValue({} as never);
 
       await expect(
         service.resendVerifyEmail(publicUser.id, session),
@@ -559,7 +559,7 @@ describe('AuthService', () => {
       users.getById.mockResolvedValue(publicUser);
       verifyTokens.issue.mockResolvedValue({ rawToken: 'raw-verify-token' });
       authEmailQueue.add.mockRejectedValue(new Error('redis down'));
-      authLogs.recordResendVerifyEmailLog.mockResolvedValue({} as never);
+      auditLogs.recordResendVerifyEmailLog.mockResolvedValue({} as never);
 
       await expect(
         service.resendVerifyEmail(publicUser.id, session),
@@ -572,7 +572,7 @@ describe('AuthService', () => {
     function setupHappyPath() {
       users.findByEmail.mockResolvedValue(publicUser);
       resetTokens.issue.mockResolvedValue({ rawToken: 'raw-reset-token' });
-      authLogs.recordForgotPasswordLog.mockResolvedValue({} as never);
+      auditLogs.recordForgotPasswordLog.mockResolvedValue({} as never);
       authEmailQueue.add.mockResolvedValue({} as never);
     }
 
@@ -585,7 +585,7 @@ describe('AuthService', () => {
         publicUser.id,
         publicUser.email,
       );
-      expect(authLogs.recordForgotPasswordLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordForgotPasswordLog).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: publicUser.id,
           email: publicUser.email,
@@ -604,13 +604,13 @@ describe('AuthService', () => {
 
     it('happy path: logs UserNotFound and silently returns when email does not exist', async () => {
       users.findByEmail.mockResolvedValue(null);
-      authLogs.recordForgotPasswordLog.mockResolvedValue({} as never);
+      auditLogs.recordForgotPasswordLog.mockResolvedValue({} as never);
 
       await expect(
         service.forgotPassword('ghost@test.com', session),
       ).resolves.toBeUndefined();
 
-      expect(authLogs.recordForgotPasswordLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordForgotPasswordLog).toHaveBeenCalledWith(
         expect.objectContaining({
           email: 'ghost@test.com',
           status: AuthStatus.UserNotFound,
@@ -625,13 +625,13 @@ describe('AuthService', () => {
       resetTokens.issue.mockRejectedValue(
         new RateLimitedException('Aguarde', { retryAfterSeconds: 60 }),
       );
-      authLogs.recordForgotPasswordLog.mockResolvedValue({} as never);
+      auditLogs.recordForgotPasswordLog.mockResolvedValue({} as never);
 
       await expect(
         service.forgotPassword(publicUser.email, session),
       ).resolves.toBeUndefined();
 
-      expect(authLogs.recordForgotPasswordLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordForgotPasswordLog).toHaveBeenCalledWith(
         expect.objectContaining({
           email: publicUser.email,
           status: AuthStatus.Failed,
@@ -642,13 +642,13 @@ describe('AuthService', () => {
 
     it('edge case: silently swallows generic error and logs Failed (anti-enumeration)', async () => {
       users.findByEmail.mockRejectedValue(new Error('db down'));
-      authLogs.recordForgotPasswordLog.mockResolvedValue({} as never);
+      auditLogs.recordForgotPasswordLog.mockResolvedValue({} as never);
 
       await expect(
         service.forgotPassword(publicUser.email, session),
       ).resolves.toBeUndefined();
 
-      expect(authLogs.recordForgotPasswordLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordForgotPasswordLog).toHaveBeenCalledWith(
         expect.objectContaining({
           email: publicUser.email,
           status: AuthStatus.Failed,
@@ -664,7 +664,7 @@ describe('AuthService', () => {
         service.forgotPassword(publicUser.email, session),
       ).resolves.toBeUndefined();
 
-      expect(authLogs.recordForgotPasswordLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordForgotPasswordLog).toHaveBeenCalledWith(
         expect.objectContaining({ status: AuthStatus.Success }),
       );
     });
@@ -747,7 +747,7 @@ describe('AuthService', () => {
       bcryptMock.hash.mockResolvedValue('new-hashed-password' as never);
       users.changePassword.mockResolvedValue(undefined);
       refreshTokens.revokeAllForUser.mockResolvedValue(undefined);
-      authLogs.recordPasswordResetLog.mockResolvedValue({} as never);
+      auditLogs.recordPasswordResetLog.mockResolvedValue({} as never);
     }
 
     it('happy path: consumes token, hashes new password, changes it, revokes all refresh tokens and logs Success', async () => {
@@ -771,7 +771,7 @@ describe('AuthService', () => {
         publicUser.id,
         prisma,
       );
-      expect(authLogs.recordPasswordResetLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordPasswordResetLog).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: publicUser.id,
           email: publicUser.email,
@@ -785,13 +785,13 @@ describe('AuthService', () => {
       resetTokens.consume.mockRejectedValue(
         new InvalidResetPasswordTokenException(publicUser.id, publicUser.email),
       );
-      authLogs.recordPasswordResetLog.mockResolvedValue({} as never);
+      auditLogs.recordPasswordResetLog.mockResolvedValue({} as never);
 
       await expect(
         service.resetPassword('expired', 'new-pass', session),
       ).rejects.toThrow(InvalidResetPasswordTokenException);
 
-      expect(authLogs.recordPasswordResetLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordPasswordResetLog).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: publicUser.id,
           email: publicUser.email,
@@ -806,13 +806,13 @@ describe('AuthService', () => {
       resetTokens.consume.mockRejectedValue(
         new InvalidResetPasswordTokenException(),
       );
-      authLogs.recordPasswordResetLog.mockResolvedValue({} as never);
+      auditLogs.recordPasswordResetLog.mockResolvedValue({} as never);
 
       await expect(
         service.resetPassword('garbage', 'new-pass', session),
       ).rejects.toThrow(InvalidResetPasswordTokenException);
 
-      expect(authLogs.recordPasswordResetLog).toHaveBeenCalledWith(
+      expect(auditLogs.recordPasswordResetLog).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: undefined,
           email: undefined,
@@ -836,7 +836,7 @@ describe('AuthService', () => {
       resetTokens.consume.mockRejectedValue(
         new InvalidResetPasswordTokenException(publicUser.id, publicUser.email),
       );
-      authLogs.recordPasswordResetLog.mockRejectedValue(new Error('log down'));
+      auditLogs.recordPasswordResetLog.mockRejectedValue(new Error('log down'));
 
       await expect(
         service.resetPassword('expired', 'new-pass', session),
