@@ -1,7 +1,7 @@
 import z from "zod";
 import { MAX_USER_EMAIL, MAX_USER_FIRST_NAME, MAX_USER_LAST_NAME, MAX_USER_PASSWORD, MIN_USER_FIRST_NAME, MIN_USER_LAST_NAME, MIN_USER_PASSWORD, PublicUserSchema } from "./user.schema";
 
-const passwordSchema = z.string()
+const PasswordSchema = z.string()
     .min(MIN_USER_PASSWORD, `Senha deve conter no mínimo ${MIN_USER_PASSWORD} caracteres.`)
     .max(MAX_USER_PASSWORD, `Senha deve conter no máximo ${MAX_USER_PASSWORD} caracteres.`)
 
@@ -14,7 +14,7 @@ export const SignUpSchema = z.object({
         .max(MAX_USER_LAST_NAME, `Sobrenome deve conter no máximo ${MAX_USER_LAST_NAME} caracteres.`),
     email: z.email(`Defina um e-mail válido.`)
         .max(MAX_USER_EMAIL, `E-mail deve conter no máximo ${MAX_USER_EMAIL} caracteres.`),
-    password: passwordSchema,
+    password: PasswordSchema,
 })
 
 export type SignUp = z.infer<typeof SignUpSchema>;
@@ -43,7 +43,7 @@ export const ForgotPasswordSchema = z.object({
 export type ForgotPassword = z.infer<typeof ForgotPasswordSchema>
 
 export const ResetPasswordSchema = z.object({
-    newPassword: passwordSchema,
+    newPassword: PasswordSchema,
     token: z.string().min(1, 'Token obrigatório')
 })
 
@@ -69,3 +69,7 @@ export const PublicAuthSessionListSchema = z.object({
 })
 
 export type PublicAuthSessionList = z.infer<typeof PublicAuthSessionListSchema>;
+
+export const OAuthProviderSchema = z.enum(['google', 'github'], 'Defina um provedor de OAuth válido');
+
+export type OAuthProvider = z.infer<typeof OAuthProviderSchema>;

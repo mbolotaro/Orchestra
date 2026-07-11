@@ -5,7 +5,6 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
-  NotImplementedException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserInput } from './types/create-user.type';
@@ -29,9 +28,24 @@ export class UsersService {
 
     try {
       if (createUserInput.kind === 'oauth') {
-        throw new NotImplementedException(
-          'Autenticação a partir de oauth ainda não foi implementada.',
-        );
+        const createdUser = await client.user.create({
+          data: {
+            firstName: createUserInput.firstName,
+            lastName: createUserInput.lastName,
+            email: createUserInput.email,
+            passwordHash: null,
+            isEmailVerified: true,
+            oAuthAccounts: {
+              create: {
+                provider: createUserInput.oauthAccount.provider,
+                providerId: createUserInput.oauthAccount.providerId,
+              },
+            },
+          },
+          omit: { passwordHash: true },
+        });
+
+        return PublicUserSchema.parse(createdUser satisfies PublicUser);
       }
 
       const createdUser = await client.user.create({

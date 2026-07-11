@@ -14,6 +14,7 @@ import { AUTH_EMAIL_QUEUE } from './auth.constants';
 import { AuthProcessor } from './auth-email.processor';
 import { PasswordResetModule } from './password-reset/password-reset.module';
 import { AuthSessionsController } from './auth-sessions.controller';
+import { OauthModule } from './oauth/oauth.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { AuthSessionsController } from './auth-sessions.controller';
         removeOnFail: { age: 7 * 24 * 3600 }, // 7 days
       },
     }),
+    OauthModule,
   ],
   controllers: [AuthController, AuthSessionsController],
   providers: [

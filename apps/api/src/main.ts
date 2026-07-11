@@ -4,9 +4,17 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { cleanupOpenApiDoc } from 'nestjs-zod';
 import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';
+import { EnvService } from './modules/env/env.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  const env = app.get(EnvService);
+
+  app.enableCors({
+    origin: env.get('FRONTEND_URL'),
+    credentials: true,
+  });
 
   app.use(cookieParser());
 

@@ -11,6 +11,8 @@ import { UsersModule } from './modules/users/users.module';
 import { EmailModule } from './modules/email/email.module';
 import { BullModule } from '@nestjs/bullmq';
 import { EnvService } from './modules/env/env.service';
+import { RedisService } from './modules/redis/redis.service';
+import { RedisModule } from './modules/redis/redis.module';
 
 @Module({
   imports: [
@@ -30,6 +32,7 @@ import { EnvService } from './modules/env/env.service';
     UsersModule,
     AuthModule,
     EmailModule,
+    RedisModule,
   ],
   controllers: [AppController],
   providers: [
@@ -45,6 +48,7 @@ import { EnvService } from './modules/env/env.service';
       provide: APP_FILTER,
       useClass: GlobalExceptionFilter,
     },
+    RedisService,
   ],
 })
 export class AppModule implements NestModule {
