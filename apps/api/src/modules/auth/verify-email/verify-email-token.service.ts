@@ -15,7 +15,7 @@ import {
   IssueVerifyEmailResponse,
   VerifyEmailTokenPayload,
 } from './types/verify-token.type';
-import { RateLimitedException } from '../../../common/exceptions/rate-limited.exception';
+import { RateLimitedException } from '../../rate-limit/exceptions/rate-limited.exception';
 import { VERIFY_EMAIL_COOLDOWN_MS } from '../auth.constants';
 
 @Injectable()

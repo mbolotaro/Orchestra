@@ -14,6 +14,7 @@ import { ZodSerializerDto } from 'nestjs-zod';
 import { PublicAuthSessionListDto } from './dto/public-auth-session-list.dto';
 import { type Request } from 'express';
 import { AuthCookieService } from './auth-cookie.service';
+import { RateLimit } from '../rate-limit/decorators/rate-limit.decorator';
 
 @Controller('auth/sessions')
 export class AuthSessionsController {
@@ -33,6 +34,7 @@ export class AuthSessionsController {
   }
 
   @Delete(':id')
+  @RateLimit({ window: 'short', by: 'user' })
   @HttpCode(HttpStatus.NO_CONTENT)
   async revokeSession(
     @CurrentUser() { sub }: RequestUser,
@@ -44,6 +46,7 @@ export class AuthSessionsController {
   }
 
   @Delete()
+  @RateLimit({ window: 'strict', by: 'user' })
   @HttpCode(HttpStatus.NO_CONTENT)
   async revokeAllOtherSessions(
     @CurrentUser() { sub }: RequestUser,

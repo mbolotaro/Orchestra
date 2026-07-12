@@ -26,6 +26,8 @@ import { PublicAuth } from '@orchestra/schemas';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { RateLimit } from '../rate-limit/decorators/rate-limit.decorator';
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -35,6 +37,7 @@ export class AuthController {
 
   @Public()
   @Post('sign-up')
+  @RateLimit({ window: 'critical', by: 'ip' })
   @ZodSerializerDto(PublicAuthDto)
   async signUp(
     @SessionInfo() session: SessionInfoPayload,
@@ -53,6 +56,7 @@ export class AuthController {
 
   @Public()
   @Post('sign-in')
+  @RateLimit({ window: 'strict', by: ['ip', 'email'] })
   @ZodSerializerDto(PublicAuthDto)
   async signIn(
     @SessionInfo() session: SessionInfoPayload,
@@ -106,6 +110,7 @@ export class AuthController {
 
   @Public()
   @Post('verify')
+  @RateLimit({ window: 'short', by: 'ip' })
   @HttpCode(HttpStatus.NO_CONTENT)
   async verifyEmail(
     @Body() body: VerifyEmailDto,
@@ -116,6 +121,7 @@ export class AuthController {
 
   @AllowUnverified()
   @Post('resend-verify')
+  @RateLimit({ window: 'critical', by: 'user' })
   @HttpCode(HttpStatus.NO_CONTENT)
   async resendVerify(
     @CurrentUser() { sub }: RequestUser,
@@ -126,6 +132,7 @@ export class AuthController {
 
   @Public()
   @Post('forgot-password')
+  @RateLimit({ window: 'strict', by: ['ip', 'email'] })
   @HttpCode(HttpStatus.NO_CONTENT)
   async forgotPassword(
     @Body() forgotPasswordDto: ForgotPasswordDto,
@@ -136,6 +143,7 @@ export class AuthController {
 
   @Public()
   @Post('reset-password')
+  @RateLimit({ window: 'short', by: 'ip' })
   @HttpCode(HttpStatus.NO_CONTENT)
   async resetPassword(
     @Body() resetPasswordDto: ResetPasswordDto,

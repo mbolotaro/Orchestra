@@ -70,6 +70,9 @@ export const PublicAuthSessionListSchema = z.object({
 
 export type PublicAuthSessionList = z.infer<typeof PublicAuthSessionListSchema>;
 
-export const OAuthProviderSchema = z.enum(['google', 'github'], 'Defina um provedor de OAuth válido');
+export enum OAuthProvider {
+    Google = 'google',
+    GitHub = 'github',
+}
 
-export type OAuthProvider = z.infer<typeof OAuthProviderSchema>;
+export const OAuthProviderSchema = z.enum(OAuthProvider, 'Defina um provedor de OAuth válido.');

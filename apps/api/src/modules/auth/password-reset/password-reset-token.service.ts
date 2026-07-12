@@ -14,7 +14,7 @@ import { Prisma } from '../../../generated/prisma/client';
 import { createHash, randomBytes } from 'crypto';
 import { durationToMs } from '../../../common/helpers/parse-duration.helper';
 import { RESET_PASSWORD_COOLDOWN_MS } from '../auth.constants';
-import { RateLimitedException } from '../../../common/exceptions/rate-limited.exception';
+import { RateLimitedException } from '../../rate-limit/exceptions/rate-limited.exception';
 import { msToHuman } from '../../../common/helpers/ms-to-human.helper';
 import { InvalidResetPasswordTokenException } from './exceptions/invalid-reset-password-token.exception';
 

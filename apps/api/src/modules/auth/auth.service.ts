@@ -39,7 +39,7 @@ import {
   VerifyEmailJobPayload,
 } from './types/auth-job.type';
 import { PasswordResetTokenService } from './password-reset/password-reset-token.service';
-import { RateLimitedException } from '../../common/exceptions/rate-limited.exception';
+import { RateLimitedException } from '../rate-limit/exceptions/rate-limited.exception';
 import { InvalidResetPasswordTokenException } from './password-reset/exceptions/invalid-reset-password-token.exception';
 
 @Injectable()

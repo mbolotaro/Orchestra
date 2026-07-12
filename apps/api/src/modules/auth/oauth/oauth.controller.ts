@@ -8,6 +8,7 @@ import { SessionInfo } from '../decorators/session-info.decorator';
 import { type SessionInfoPayload } from '../types/session-info.type';
 import { AuthCookieService } from '../auth-cookie.service';
 import { EnvService } from '../../env/env.service';
+import { RateLimit } from '../../rate-limit/decorators/rate-limit.decorator';
 
 @Controller('auth/oauth')
 export class OAuthController {
@@ -21,6 +22,7 @@ export class OAuthController {
 
   @Public()
   @Get(':provider')
+  @RateLimit({ window: 'medium', by: 'ip' })
   async start(
     @Param('provider', new ZodValidationPipe(OAuthProviderSchema))
     provider: OAuthProvider,
@@ -33,6 +35,7 @@ export class OAuthController {
 
   @Public()
   @Get(':provider/callback')
+  @RateLimit({ window: 'medium', by: 'ip' })
   async callback(
     @Param('provider', new ZodValidationPipe(OAuthProviderSchema))
     provider: OAuthProvider,

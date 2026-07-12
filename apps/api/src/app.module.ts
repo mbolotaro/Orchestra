@@ -1,5 +1,5 @@
 import { MiddlewareConsumer, Module, type NestModule } from '@nestjs/common';
-import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
 import { AppController } from './app.controller';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
@@ -13,6 +13,8 @@ import { BullModule } from '@nestjs/bullmq';
 import { EnvService } from './modules/env/env.service';
 import { RedisService } from './modules/redis/redis.service';
 import { RedisModule } from './modules/redis/redis.module';
+import { RateLimitModule } from './modules/rate-limit/rate-limit.module';
+import { RateLimitGuard } from './modules/rate-limit/guards/rate-limit.guard';
 
 @Module({
   imports: [
@@ -33,6 +35,7 @@ import { RedisModule } from './modules/redis/redis.module';
     AuthModule,
     EmailModule,
     RedisModule,
+    RateLimitModule,
   ],
   controllers: [AppController],
   providers: [
@@ -47,6 +50,10 @@ import { RedisModule } from './modules/redis/redis.module';
     {
       provide: APP_FILTER,
       useClass: GlobalExceptionFilter,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RateLimitGuard,
     },
     RedisService,
   ],
