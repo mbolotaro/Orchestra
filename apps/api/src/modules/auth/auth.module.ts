@@ -15,6 +15,7 @@ import { AuthProcessor } from './auth-email.processor';
 import { PasswordResetModule } from './password-reset/password-reset.module';
 import { AuthSessionsController } from './auth-sessions.controller';
 import { OauthModule } from './oauth/oauth.module';
+import { AuthCleanupModule } from './cleanup/auth-cleanup.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { OauthModule } from './oauth/oauth.module';
       },
     }),
     OauthModule,
+    AuthCleanupModule,
   ],
   controllers: [AuthController, AuthSessionsController],
   providers: [

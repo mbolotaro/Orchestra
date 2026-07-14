@@ -15,6 +15,7 @@ import { RedisService } from './modules/redis/redis.service';
 import { RedisModule } from './modules/redis/redis.module';
 import { RateLimitModule } from './modules/rate-limit/rate-limit.module';
 import { RateLimitGuard } from './modules/rate-limit/guards/rate-limit.guard';
+import { CleanupModule } from './modules/cleanup/cleanup.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { RateLimitGuard } from './modules/rate-limit/guards/rate-limit.guard';
     EmailModule,
     RedisModule,
     RateLimitModule,
+    CleanupModule,
   ],
   controllers: [AppController],
   providers: [

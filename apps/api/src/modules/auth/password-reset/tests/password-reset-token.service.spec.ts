@@ -5,7 +5,7 @@ import { EnvService } from '../../../env/env.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PasswordResetTokenService } from '../password-reset-token.service';
 import { InvalidResetPasswordTokenException } from '../exceptions/invalid-reset-password-token.exception';
-import { RateLimitedException } from '../../../../common/exceptions/rate-limited.exception';
+import { RateLimitedException } from '../../../rate-limit/exceptions/rate-limited.exception';
 import { RESET_PASSWORD_COOLDOWN_MS } from '../../auth.constants';
 
 const USER_ID = '0193b3c0-0000-7000-8000-000000000000';

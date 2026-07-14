@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { EmailAlreadyExistsException } from '../../../common/exceptions/email-already-exists.exception';
 import { InvalidCredentialsException } from '../../../common/exceptions/invalid-credentials.exception';
-import { RateLimitedException } from '../../../common/exceptions/rate-limited.exception';
+import { RateLimitedException } from '../../rate-limit/exceptions/rate-limited.exception';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
 import { mockDeep, type DeepMockProxy } from 'jest-mock-extended';
