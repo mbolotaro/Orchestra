@@ -46,7 +46,7 @@ model OAuthAccount {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime? @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerId])
   @@unique([userId, provider])
@@ -62,6 +62,7 @@ enum AuthAction {
   ResendVerifyEmail @map("resend_verify_email")
   ForgotPassword @map("forgot_password")
   PasswordReset @map("password_reset")
+  DeleteAccount @map("delete_account")
 
   @@map("auth_action")
 }
@@ -107,7 +108,7 @@ model RefreshToken {
   userAgent String? @db.VarChar(512) @map("user_agent")
   ipAddress String? @db.VarChar(45) @map("ip_address")
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, revokedAt])
   @@index([jti])
@@ -124,7 +125,7 @@ model EmailVerificationToken {
   usedAt    DateTime? @map("used_at")
   createdAt DateTime  @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, usedAt])
   @@map("email_verification_tokens")

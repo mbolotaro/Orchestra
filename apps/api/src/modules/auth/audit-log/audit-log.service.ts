@@ -196,6 +196,32 @@ export class AuditLogService {
     }
   }
 
+  async recordDeleteAccountLog(
+    recordAuthLog: RecordAuthLog,
+    tx?: TransactionClient,
+  ) {
+    try {
+      const client = tx ?? this.prismaService;
+      return await client.authLog.create({
+        data: {
+          action: AuthAction.DeleteAccount,
+          status: recordAuthLog.status,
+          email: recordAuthLog.email,
+          userId: recordAuthLog.userId,
+          occurredAt: recordAuthLog.occurredAt,
+          ipAddress: recordAuthLog.ipAddress,
+          userAgent: recordAuthLog.userAgent,
+        },
+      });
+    } catch (error) {
+      this.logger.error({ error }, 'recordDeleteAccountLog');
+
+      throw new InternalServerErrorException(
+        'Não foi possível registrar exclusão de conta.',
+      );
+    }
+  }
+
   async recordResendVerifyEmailLog(
     recordAuthLog: RecordAuthLog,
     tx?: TransactionClient,

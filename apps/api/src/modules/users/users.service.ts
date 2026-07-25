@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserInput } from './types/create-user.type';
-import { PublicUser, PublicUserSchema } from '@orchestra/schemas';
+import { PublicUser, PublicUserSchema, UpdateUser } from '@orchestra/schemas';
 import { getPrismaError } from '../prisma/helpers/get-prisma-error.helper';
 import { EmailAlreadyExistsException } from '../../common/exceptions/email-already-exists.exception';
 import { TransactionClient } from '../../generated/prisma/internal/prismaNamespace';
@@ -79,8 +79,8 @@ export class UsersService {
   async getById(userId: string, tx?: TransactionClient): Promise<PublicUser> {
     try {
       const client = tx ?? this.prismaService;
-      const user = await client.user.findUnique({
-        where: { id: userId },
+      const user = await client.user.findFirst({
+        where: { id: userId, deletedAt: null },
         omit: { passwordHash: true },
       });
 
@@ -106,7 +106,7 @@ export class UsersService {
 
     try {
       const user = await client.user.findFirst({
-        where: { email },
+        where: { email, deletedAt: null },
         omit: { passwordHash: true },
       });
 
@@ -129,7 +129,9 @@ export class UsersService {
     const client = tx ?? this.prismaService;
 
     try {
-      const user = await client.user.findFirst({ where: { email } });
+      const user = await client.user.findFirst({
+        where: { email, deletedAt: null },
+      });
 
       return user;
     } catch (error) {
@@ -169,6 +171,54 @@ export class UsersService {
 
       throw new InternalServerErrorException(
         'Não foi possível marcar e-mail como verificado.',
+      );
+    }
+  }
+
+  async update(
+    userId: string,
+    updateUserDto: UpdateUser,
+    tx?: TransactionClient,
+  ): Promise<PublicUser> {
+    const client = tx ?? this.prismaService;
+
+    try {
+      const user = await client.user.update({
+        where: { id: userId },
+        data: {
+          firstName: updateUserDto.firstName,
+          lastName: updateUserDto.lastName,
+        },
+        omit: { passwordHash: true },
+      });
+
+      return PublicUserSchema.parse(user satisfies PublicUser);
+    } catch (error) {
+      this.logger.error({ error, userId, updateUserDto }, 'update');
+      throw new InternalServerErrorException(
+        'Não foi possível atualizar dados do usuário.',
+      );
+    }
+  }
+
+  async softDelete(userId: string, tx?: TransactionClient): Promise<void> {
+    const client = tx ?? this.prismaService;
+
+    try {
+      const { count } = await client.user.updateMany({
+        where: { id: userId, deletedAt: null },
+        data: { deletedAt: new Date() },
+      });
+
+      if (count === 0) {
+        throw new NotFoundException('Usuário não encontrado.');
+      }
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+
+      this.logger.error({ error, userId }, 'softDelete');
+      throw new InternalServerErrorException(
+        'Não foi possível apagar a conta.',
       );
     }
   }

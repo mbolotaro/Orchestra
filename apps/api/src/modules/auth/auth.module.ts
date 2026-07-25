@@ -5,7 +5,7 @@ import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { TokensModule } from './tokens/tokens.module';
-import { AuthCookieService } from './auth-cookie.service';
+import { AuthCookieModule } from './cookie/auth-cookie.module';
 import { AuthGuard } from './guards/auth.guard';
 import { VerifyEmailModule } from './verify-email/verify-email.module';
 import { EmailModule } from '../email/email.module';
@@ -39,11 +39,11 @@ import { AuthCleanupModule } from './cleanup/auth-cleanup.module';
     }),
     OauthModule,
     AuthCleanupModule,
+    AuthCookieModule,
   ],
   controllers: [AuthController, AuthSessionsController],
   providers: [
     AuthService,
-    AuthCookieService,
     {
       provide: APP_GUARD,
       useClass: AuthGuard,

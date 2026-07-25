@@ -19,4 +19,18 @@ export const PublicUserSchema = z.object({
     isEmailVerified: z.boolean(),
 })
 
+export const UserFirstNameSchema = z.string('Defina o nome do usuário.')
+    .min(MIN_USER_FIRST_NAME, `Nome do usuário deve conter no mínimo ${MIN_USER_FIRST_NAME} caracteres.`)
+    .max(MAX_USER_FIRST_NAME, `Nome do usuário deve conter no máximo ${MAX_USER_FIRST_NAME} caracteres.`)
+
+export const UserLastNameSchema = z.string('Defina o sobrenome do usuário.')
+    .min(MIN_USER_LAST_NAME, `Sobrenome deve conter no mínimo ${MIN_USER_LAST_NAME} caracteres.`)
+    .max(MAX_USER_LAST_NAME, `Sobrenome deve conter no máximo ${MAX_USER_LAST_NAME} caracteres.`)
+
+export const UpdateUserSchema = z.object({
+    firstName: UserFirstNameSchema,
+    lastName: UserLastNameSchema,
+})
+
 export type PublicUser = z.infer<typeof PublicUserSchema>
+export type UpdateUser = z.infer<typeof UpdateUserSchema>

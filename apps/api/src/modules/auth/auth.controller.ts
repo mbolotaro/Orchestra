@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Get,
   HttpCode,
   HttpStatus,
   Post,
@@ -154,12 +153,5 @@ export class AuthController {
       resetPasswordDto.newPassword,
       session,
     );
-  }
-
-  @AllowUnverified()
-  @Get('me')
-  @ZodSerializerDto(PublicAuthDto)
-  async me(@CurrentUser() { sub }: RequestUser): Promise<PublicAuth> {
-    return await this.authService.me(sub);
   }
 }

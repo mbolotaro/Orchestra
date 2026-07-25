@@ -1,17 +1,13 @@
 import z from "zod";
-import { MAX_USER_EMAIL, MAX_USER_FIRST_NAME, MAX_USER_LAST_NAME, MAX_USER_PASSWORD, MIN_USER_FIRST_NAME, MIN_USER_LAST_NAME, MIN_USER_PASSWORD, PublicUserSchema } from "./user.schema";
+import { MAX_USER_EMAIL, MAX_USER_PASSWORD, MIN_USER_PASSWORD, PublicUserSchema, UserFirstNameSchema, UserLastNameSchema } from "./user.schema";
 
 const PasswordSchema = z.string()
     .min(MIN_USER_PASSWORD, `Senha deve conter no mínimo ${MIN_USER_PASSWORD} caracteres.`)
     .max(MAX_USER_PASSWORD, `Senha deve conter no máximo ${MAX_USER_PASSWORD} caracteres.`)
 
 export const SignUpSchema = z.object({
-    firstName: z.string('Defina o nome do usuário.')
-        .min(MIN_USER_FIRST_NAME, `Nome do usuário deve conter no mínimo ${MIN_USER_FIRST_NAME} caracteres.`)
-        .max(MAX_USER_FIRST_NAME, `Nome do usuário deve conter no máximo ${MAX_USER_FIRST_NAME} caracteres.`),
-    lastName: z.string('Defina o sobrenome do usuário.')
-        .min(MIN_USER_LAST_NAME, `Sobrenome deve conter no mínimo ${MIN_USER_LAST_NAME} caracteres.`)
-        .max(MAX_USER_LAST_NAME, `Sobrenome deve conter no máximo ${MAX_USER_LAST_NAME} caracteres.`),
+    firstName: UserFirstNameSchema,
+    lastName: UserLastNameSchema,
     email: z.email(`Defina um e-mail válido.`)
         .max(MAX_USER_EMAIL, `E-mail deve conter no máximo ${MAX_USER_EMAIL} caracteres.`),
     password: PasswordSchema,

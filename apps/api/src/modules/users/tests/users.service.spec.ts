@@ -122,29 +122,29 @@ describe('UsersService', () => {
 
   describe('getById', () => {
     it('happy path: returns PublicUser when user exists', async () => {
-      prisma.user.findUnique.mockResolvedValue(dbUser);
+      prisma.user.findFirst.mockResolvedValue(dbUser);
 
       const result = await service.getById(publicUser.id);
 
       expect(result).toEqual(publicUser);
-      expect(prisma.user.findUnique).toHaveBeenCalledWith({
-        where: { id: publicUser.id },
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
+        where: { id: publicUser.id, deletedAt: null },
         omit: { passwordHash: true },
       });
     });
 
     it('happy path: uses tx client when provided', async () => {
       const tx = mockDeep<PrismaService>();
-      tx.user.findUnique.mockResolvedValue(dbUser);
+      tx.user.findFirst.mockResolvedValue(dbUser);
 
       await service.getById(publicUser.id, tx);
 
-      expect(tx.user.findUnique).toHaveBeenCalled();
-      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+      expect(tx.user.findFirst).toHaveBeenCalled();
+      expect(prisma.user.findFirst).not.toHaveBeenCalled();
     });
 
     it('error: throws NotFoundException when user is not in DB', async () => {
-      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.findFirst.mockResolvedValue(null);
 
       await expect(service.getById('missing')).rejects.toThrow(
         NotFoundException,
@@ -152,7 +152,7 @@ describe('UsersService', () => {
     });
 
     it('error: throws InternalServerErrorException when prisma fails', async () => {
-      prisma.user.findUnique.mockRejectedValue(new Error('db down'));
+      prisma.user.findFirst.mockRejectedValue(new Error('db down'));
 
       await expect(service.getById('any')).rejects.toThrow(
         InternalServerErrorException,
@@ -168,7 +168,7 @@ describe('UsersService', () => {
 
       expect(result).toEqual(dbUser);
       expect(prisma.user.findFirst).toHaveBeenCalledWith({
-        where: { email: publicUser.email },
+        where: { email: publicUser.email, deletedAt: null },
       });
     });
 

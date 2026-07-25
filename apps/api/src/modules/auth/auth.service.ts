@@ -19,7 +19,6 @@ import { TokenService } from './tokens/token.service';
 import { AuthSession } from './types/auth-session.type';
 import { SignInDto } from './dto/signin.dto';
 import {
-  PublicAuth,
   PublicAuthSession,
   PublicAuthSessionList,
   PublicUser,
@@ -263,14 +262,6 @@ export class AuthService {
       .catch((logError: unknown) =>
         this.logger.error({ error: logError }, 'signOut'),
       );
-  }
-
-  async me(userId: string): Promise<PublicAuth> {
-    const user = await this.usersService.getById(userId);
-
-    return {
-      user,
-    };
   }
 
   async revokeSession(

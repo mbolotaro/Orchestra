@@ -314,17 +314,6 @@ describe('AuthService', () => {
     });
   });
 
-  describe('me', () => {
-    it('happy path: returns user wrapped in PublicAuth shape', async () => {
-      users.getById.mockResolvedValue(publicUser);
-
-      const result = await service.me(publicUser.id);
-
-      expect(result).toEqual({ user: publicUser });
-      expect(users.getById).toHaveBeenCalledWith(publicUser.id);
-    });
-  });
-
   describe('refresh', () => {
     it('happy path: rotates refresh, issues access, logs Success', async () => {
       refreshTokens.rotate.mockResolvedValue({
